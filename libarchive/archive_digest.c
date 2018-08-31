@@ -472,7 +472,7 @@ __archive_ripemd160final(archive_rmd160_ctx *ctx, void *md)
   return (ARCHIVE_OK);
 }
 
-#elif defined(ARCHIVE_CRYPTO_RMD160_OPENSSL)
+#elif defined(ARCHIVE_CRYPTO_RMD160_OPENSSL) && !defined(OPENSSL_IS_BORINGSSL)
 
 static int
 __archive_ripemd160init(archive_rmd160_ctx *ctx)
