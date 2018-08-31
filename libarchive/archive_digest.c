@@ -427,7 +427,7 @@ __archive_nettle_ripemd160final(archive_rmd160_ctx *ctx, void *md)
   return (ARCHIVE_OK);
 }
 
-#elif defined(ARCHIVE_CRYPTO_RMD160_OPENSSL)
+#elif defined(ARCHIVE_CRYPTO_RMD160_OPENSSL) && !defined(OPENSSL_IS_BORINGSSL)
 
 static int
 __archive_openssl_ripemd160init(archive_rmd160_ctx *ctx)
@@ -1519,7 +1519,7 @@ const struct archive_digest __archive_digest =
   &__archive_nettle_ripemd160init,
   &__archive_nettle_ripemd160update,
   &__archive_nettle_ripemd160final,
-#elif defined(ARCHIVE_CRYPTO_RMD160_OPENSSL)
+#elif defined(ARCHIVE_CRYPTO_RMD160_OPENSSL) && !defined(OPENSSL_IS_BORINGSSL)
   &__archive_openssl_ripemd160init,
   &__archive_openssl_ripemd160update,
   &__archive_openssl_ripemd160final,
