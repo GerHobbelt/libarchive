@@ -320,7 +320,7 @@ read_archive(struct bsdtar *bsdtar, char mode, struct archive *writer)
 				safe_fprintf(out, "%s",
 				    archive_entry_pathname(entry));
 			else
-				list_item_verbose(bsdtar, out, entry);
+				list_item_verbose(bsdtar, out, entry, bsdtar->verbose > 2);
 			fflush(out);
 			r = archive_read_data_skip(a);
 			if (r == ARCHIVE_WARN) {
@@ -353,7 +353,7 @@ read_archive(struct bsdtar *bsdtar, char mode, struct archive *writer)
 			if (bsdtar->verbose > 1) {
 				/* GNU tar uses -tv format with -xvv */
 				safe_fprintf(stderr, "x ");
-				list_item_verbose(bsdtar, stderr, entry);
+				list_item_verbose(bsdtar, stderr, entry, bsdtar->verbose > 2);
 				fflush(stderr);
 			} else if (bsdtar->verbose > 0) {
 				/* Format follows SUSv2, including the
