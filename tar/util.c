@@ -59,6 +59,8 @@ __FBSDID("$FreeBSD: src/usr.bin/tar/util.c,v 1.23 2008/12/15 06:00:25 kientzle E
 #define	iswprint isprint
 #endif
 
+#include <inttypes.h>
+
 #include "bsdtar.h"
 #include "err.h"
 #include "passphrase.h"
@@ -658,7 +660,8 @@ passphrase_free(char *ppbuff)
  * and 'pax -l' is documented as using the same format as 'ls -l'.
  */
 void
-list_item_verbose(struct bsdtar *bsdtar, FILE *out, struct archive_entry *entry)
+list_item_verbose(struct bsdtar *bsdtar, FILE *out, struct archive_entry *entry
+				  , int exact_time)
 {
 	char			 tmp[100];
 	size_t			 w;
@@ -741,24 +744,28 @@ list_item_verbose(struct bsdtar *bsdtar, FILE *out, struct archive_entry *entry)
 #else
 #define	DAY_FMT  "%e"  /* Day number without leading zeros */
 #endif
-	if (tim < now - HALF_YEAR || tim > now + HALF_YEAR)
-		fmt = bsdtar->day_first ? DAY_FMT " %b  %Y" : "%b " DAY_FMT "  %Y";
-	else
-		fmt = bsdtar->day_first ? DAY_FMT " %b %H:%M" : "%b " DAY_FMT " %H:%M";
-#if defined(HAVE_LOCALTIME_R)
-	ltime = localtime_r(&tim, &tmbuf);
-#elif defined(HAVE__LOCALTIME64_S)
-	tmptime = tim;
-	terr = _localtime64_s(&tmbuf, &tmptime);
-	if (terr)
-		ltime = NULL;
-	else
-		ltime = &tmbuf;
-#else
-	ltime = localtime(&tim);
-#endif
-	strftime(tmp, sizeof(tmp), fmt, ltime);
-	fprintf(out, " %s ", tmp);
+	if (exact_time) {
+		safe_fprintf(out, " 0x%016" PRIx64 " 0x%08" PRIx32 " ", (uint64_t)archive_entry_mtime(entry), (uint32_t)archive_entry_mtime_nsec(entry));
+	} else {
+		if (tim < now - HALF_YEAR || tim > now + HALF_YEAR)
+			fmt = bsdtar->day_first ? DAY_FMT " %b  %Y" : "%b " DAY_FMT "  %Y";
+		else
+			fmt = bsdtar->day_first ? DAY_FMT " %b %H:%M" : "%b " DAY_FMT " %H:%M";
+	#if defined(HAVE_LOCALTIME_R)
+		ltime = localtime_r(&tim, &tmbuf);
+	#elif defined(HAVE__LOCALTIME64_S)
+		tmptime = tim;
+		terr = _localtime64_s(&tmbuf, &tmptime);
+		if (terr)
+			ltime = NULL;
+		else
+			ltime = &tmbuf;
+	#else
+		ltime = localtime(&tim);
+	#endif
+		strftime(tmp, sizeof(tmp), fmt, ltime);
+		fprintf(out, " %s ", tmp);
+	}
 	safe_fprintf(out, "%s", archive_entry_pathname(entry));
 
 	/* Extra information for links. */
