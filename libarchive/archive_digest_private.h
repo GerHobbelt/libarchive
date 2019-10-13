@@ -174,7 +174,9 @@ typedef struct {
 #endif
 
 /* typedefs */
-#if defined(ARCHIVE_CRYPTO_MD5_LIBC)
+#if defined(ARCHIVE_CRYPTO_MD5_OPENSSL)
+typedef EVP_MD_CTX *archive_md5_ctx;
+#elif defined(ARCHIVE_CRYPTO_MD5_LIBC)
 typedef MD5_CTX archive_md5_ctx;
 #elif defined(ARCHIVE_CRYPTO_MD5_LIBMD)
 typedef MD5_CTX archive_md5_ctx;
@@ -184,8 +186,6 @@ typedef CC_MD5_CTX archive_md5_ctx;
 typedef mbedtls_md5_context archive_md5_ctx;
 #elif defined(ARCHIVE_CRYPTO_MD5_NETTLE)
 typedef struct md5_ctx archive_md5_ctx;
-#elif defined(ARCHIVE_CRYPTO_MD5_OPENSSL)
-typedef EVP_MD_CTX *archive_md5_ctx;
 #elif defined(ARCHIVE_CRYPTO_MD5_WIN)
 typedef Digest_CTX archive_md5_ctx;
 #else
