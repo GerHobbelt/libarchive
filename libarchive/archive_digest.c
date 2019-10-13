@@ -104,9 +104,42 @@ win_crypto_Final(unsigned char *buf, size_t bufsize, Digest_CTX *ctx)
 
 #endif /* defined(ARCHIVE_CRYPTO_*_WIN) */
 
-
 /* MD5 implementations */
-#if defined(ARCHIVE_CRYPTO_MD5_LIBC)
+#if defined(ARCHIVE_CRYPTO_MD5_OPENSSL)
+
+static int
+__archive_openssl_md5init(archive_md5_ctx *ctx)
+{
+  if ((*ctx = EVP_MD_CTX_new()) == NULL)
+  return (ARCHIVE_FAILED);
+  EVP_DigestInit(*ctx, EVP_md5());
+  return (ARCHIVE_OK);
+}
+
+static int
+__archive_openssl_md5update(archive_md5_ctx *ctx, const void *indata,
+    size_t insize)
+{
+  EVP_DigestUpdate(*ctx, indata, insize);
+  return (ARCHIVE_OK);
+}
+
+static int
+__archive_openssl_md5final(archive_md5_ctx *ctx, void *md)
+{
+  /* HACK: archive_write_set_format_xar.c is finalizing empty contexts, so
+   * this is meant to cope with that. Real fix is probably to fix
+   * archive_write_set_format_xar.c
+   */
+  if (*ctx) {
+    EVP_DigestFinal(*ctx, md, NULL);
+    EVP_MD_CTX_free(*ctx);
+    *ctx = NULL;
+  }
+  return (ARCHIVE_OK);
+}
+
+#elif defined(ARCHIVE_CRYPTO_MD5_LIBC)
 
 static int
 __archive_libc_md5init(archive_md5_ctx *ctx)
@@ -199,40 +232,6 @@ static int
 __archive_nettle_md5final(archive_md5_ctx *ctx, void *md)
 {
   md5_digest(ctx, MD5_DIGEST_SIZE, md);
-  return (ARCHIVE_OK);
-}
-
-#elif defined(ARCHIVE_CRYPTO_MD5_OPENSSL)
-
-static int
-__archive_openssl_md5init(archive_md5_ctx *ctx)
-{
-  if ((*ctx = EVP_MD_CTX_new()) == NULL)
-	return (ARCHIVE_FAILED);
-  EVP_DigestInit(*ctx, EVP_md5());
-  return (ARCHIVE_OK);
-}
-
-static int
-__archive_openssl_md5update(archive_md5_ctx *ctx, const void *indata,
-    size_t insize)
-{
-  EVP_DigestUpdate(*ctx, indata, insize);
-  return (ARCHIVE_OK);
-}
-
-static int
-__archive_openssl_md5final(archive_md5_ctx *ctx, void *md)
-{
-  /* HACK: archive_write_set_format_xar.c is finalizing empty contexts, so
-   * this is meant to cope with that. Real fix is probably to fix
-   * archive_write_set_format_xar.c
-   */
-  if (*ctx) {
-    EVP_DigestFinal(*ctx, md, NULL);
-    EVP_MD_CTX_free(*ctx);
-    *ctx = NULL;
-  }
   return (ARCHIVE_OK);
 }
 
@@ -1264,7 +1263,11 @@ __archive_stub_sha512final(archive_sha512_ctx *ctx, void *md)
 const struct archive_digest __archive_digest =
 {
 /* MD5 */
-#if defined(ARCHIVE_CRYPTO_MD5_LIBC)
+#if defined(ARCHIVE_CRYPTO_MD5_OPENSSL)
+  &__archive_openssl_md5init,
+  &__archive_openssl_md5update,
+  &__archive_openssl_md5final,
+#elif defined(ARCHIVE_CRYPTO_MD5_LIBC)
   &__archive_libc_md5init,
   &__archive_libc_md5update,
   &__archive_libc_md5final,
@@ -1280,10 +1283,6 @@ const struct archive_digest __archive_digest =
   &__archive_nettle_md5init,
   &__archive_nettle_md5update,
   &__archive_nettle_md5final,
-#elif defined(ARCHIVE_CRYPTO_MD5_OPENSSL)
-  &__archive_openssl_md5init,
-  &__archive_openssl_md5update,
-  &__archive_openssl_md5final,
 #elif defined(ARCHIVE_CRYPTO_MD5_WIN)
   &__archive_windowsapi_md5init,
   &__archive_windowsapi_md5update,
