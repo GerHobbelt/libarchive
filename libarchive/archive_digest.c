@@ -144,9 +144,43 @@ win_crypto_Final(unsigned char *buf, size_t bufsize, Digest_CTX *ctx)
 
 #endif /* defined(ARCHIVE_CRYPTO_*_WIN) */
 
-
 /* MD5 implementations */
-#if defined(ARCHIVE_CRYPTO_MD5_LIBC)
+#if defined(ARCHIVE_CRYPTO_MD5_OPENSSL)
+
+static int
+__archive_md5init(archive_md5_ctx *ctx)
+{
+  if ((*ctx = EVP_MD_CTX_new()) == NULL)
+    return (ARCHIVE_FAILED);
+  if (!EVP_DigestInit(*ctx, EVP_md5()))
+    return (ARCHIVE_FAILED);
+  return (ARCHIVE_OK);
+}
+
+static int
+__archive_md5update(archive_md5_ctx *ctx, const void *indata,
+    size_t insize)
+{
+  EVP_DigestUpdate(*ctx, indata, insize);
+  return (ARCHIVE_OK);
+}
+
+static int
+__archive_md5final(archive_md5_ctx *ctx, void *md)
+{
+  /* HACK: archive_write_set_format_xar.c is finalizing empty contexts, so
+   * this is meant to cope with that. Real fix is probably to fix
+   * archive_write_set_format_xar.c
+   */
+  if (*ctx) {
+    EVP_DigestFinal(*ctx, md, NULL);
+    EVP_MD_CTX_free(*ctx);
+    *ctx = NULL;
+  }
+  return (ARCHIVE_OK);
+}
+
+#elif defined(ARCHIVE_CRYPTO_MD5_LIBC)
 
 static int
 __archive_md5init(archive_md5_ctx *ctx)
@@ -273,41 +307,6 @@ static int
 __archive_md5final(archive_md5_ctx *ctx, void *md)
 {
   md5_digest(ctx, MD5_DIGEST_SIZE, md);
-  return (ARCHIVE_OK);
-}
-
-#elif defined(ARCHIVE_CRYPTO_MD5_OPENSSL)
-
-static int
-__archive_md5init(archive_md5_ctx *ctx)
-{
-  if ((*ctx = EVP_MD_CTX_new()) == NULL)
-	return (ARCHIVE_FAILED);
-  if (!EVP_DigestInit(*ctx, EVP_md5()))
-	return (ARCHIVE_FAILED);
-  return (ARCHIVE_OK);
-}
-
-static int
-__archive_md5update(archive_md5_ctx *ctx, const void *indata,
-    size_t insize)
-{
-  EVP_DigestUpdate(*ctx, indata, insize);
-  return (ARCHIVE_OK);
-}
-
-static int
-__archive_md5final(archive_md5_ctx *ctx, void *md)
-{
-  /* HACK: archive_write_set_format_xar.c is finalizing empty contexts, so
-   * this is meant to cope with that. Real fix is probably to fix
-   * archive_write_set_format_xar.c
-   */
-  if (*ctx) {
-    EVP_DigestFinal(*ctx, md, NULL);
-    EVP_MD_CTX_free(*ctx);
-    *ctx = NULL;
-  }
   return (ARCHIVE_OK);
 }
 
