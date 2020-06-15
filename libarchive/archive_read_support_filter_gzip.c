@@ -468,7 +468,7 @@ gzip_filter_read(struct archive_read_filter *self, const void **p)
 		state->stream.avail_in = (uInt)avail_in;
 
 		/* Decompress and consume some of that data. */
-		ret = inflate(&(state->stream), 0);
+		ret = inflate(&(state->stream), Z_NO_FLUSH);
 		switch (ret) {
 		case Z_OK: /* Decompressor made some progress. */
 			__archive_read_filter_consume(self->upstream,

@@ -1023,6 +1023,7 @@ static int
 rd_contents(struct archive_read *a, const void **buff, size_t *size,
     size_t *used, uint64_t remaining)
 {
+	static const ssize_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 	const unsigned char *b;
 	ssize_t bytes;
 
@@ -1037,6 +1038,8 @@ rd_contents(struct archive_read *a, const void **buff, size_t *size,
 	}
 	if ((uint64_t)bytes > remaining)
 		bytes = (ssize_t)remaining;
+	if (bytes > max_decode_size)
+		bytes = max_decode_size;
 
 	/*
 	 * Decompress contents of file.
@@ -1616,7 +1619,7 @@ decompress(struct archive_read *a, const void **buff, size_t *outbytes,
 		xar->stream.avail_in = avail_in;
 		xar->stream.next_out = (unsigned char *)outbuff;
 		xar->stream.avail_out = avail_out;
-		r = inflate(&(xar->stream), 0);
+		r = inflate(&(xar->stream), Z_NO_FLUSH);
 		switch (r) {
 		case Z_OK: /* Decompressor made some progress.*/
 		case Z_STREAM_END: /* Found end of stream. */
