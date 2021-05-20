@@ -113,6 +113,8 @@ typedef ssize_t la_ssize_t;
 #  else
 #   define __LA_DECL	__declspec(dllexport)
 #  endif
+# elif defined(BUILDING_LIBARCHIVE) && defined(ARCHIVE_STATICLIB)
+#   define __LA_DECL
 # else
 #  ifdef __GNUC__
 #   define __LA_DECL
