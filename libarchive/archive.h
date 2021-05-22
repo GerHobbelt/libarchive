@@ -107,14 +107,14 @@ typedef ssize_t la_ssize_t;
  * libarchive source should ever define __LIBARCHIVE_BUILD.
  */
 #if ((defined __WIN32__) || (defined _WIN32) || defined(__CYGWIN__)) && (!defined LIBARCHIVE_STATIC)
-# ifdef __LIBARCHIVE_BUILD
+# if defined(BUILDING_LIBARCHIVE) && defined(ARCHIVE_STATICLIB)
+#   define __LA_DECL
+# elif defined(__LIBARCHIVE_BUILD)
 #  ifdef __GNUC__
 #   define __LA_DECL	__attribute__((dllexport)) extern
 #  else
 #   define __LA_DECL	__declspec(dllexport)
 #  endif
-# elif defined(BUILDING_LIBARCHIVE) && defined(ARCHIVE_STATICLIB)
-#   define __LA_DECL
 # else
 #  ifdef __GNUC__
 #   define __LA_DECL
