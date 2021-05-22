@@ -2180,9 +2180,6 @@ tree_reopen(struct tree *t, const char *path, int restore_time)
 #elif defined(O_SEARCH)
 	/* SunOS */
 	const int o_flag = O_SEARCH;
-#elif defined(__FreeBSD__) && defined(O_EXEC)
-	/* FreeBSD */
-	const int o_flag = O_EXEC;
 #endif
 
 	t->flags = (restore_time != 0)?needsRestoreTimes:0;
@@ -2206,8 +2203,7 @@ tree_reopen(struct tree *t, const char *path, int restore_time)
 	t->stack->flags = needsFirstVisit;
 	t->maxOpenCount = t->openCount = 1;
 	t->initial_dir_fd = open(".", O_RDONLY | O_CLOEXEC);
-#if defined(O_PATH) || defined(O_SEARCH) || \
- (defined(__FreeBSD__) && defined(O_EXEC))
+#if defined(O_PATH) || defined(O_SEARCH)
 	/*
 	 * Most likely reason to fail opening "." is that it's not readable,
 	 * so try again for execute. The consequences of not opening this are
