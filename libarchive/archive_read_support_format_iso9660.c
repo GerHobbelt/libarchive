@@ -1599,7 +1599,7 @@ zisofs_read_data(struct archive_read *a,
 		zisofs->stream.avail_out =
 		    (uInt)zisofs->uncompressed_buffer_size;
 
-		r = inflate(&zisofs->stream, 0);
+		r = inflate(&zisofs->stream, Z_NO_FLUSH);
 		switch (r) {
 		case Z_OK: /* Decompressor made some progress.*/
 		case Z_STREAM_END: /* Found end of stream. */

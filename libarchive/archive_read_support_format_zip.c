@@ -2205,6 +2205,7 @@ zip_read_data_zipx_bzip2(struct archive_read *a, const void **buff,
 	const void *compressed_buff;
 	int r;
 	uint64_t total_out;
+	static const ssize_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 
 	(void) offset; /* UNUSED */
 
@@ -2237,6 +2238,8 @@ zip_read_data_zipx_bzip2(struct archive_read *a, const void **buff,
 
 	/* Setup buffer boundaries. */
 	zip->bzstream.next_in = (char*)(uintptr_t) compressed_buff;
+	if (in_bytes > max_decode_size)
+		in_bytes = max_decode_size;
 	zip->bzstream.avail_in = in_bytes;
 	zip->bzstream.total_in_hi32 = 0;
 	zip->bzstream.total_in_lo32 = 0;
@@ -2333,6 +2336,7 @@ zip_read_data_deflate(struct archive_read *a, const void **buff,
 	ssize_t bytes_avail;
 	const void *compressed_buff, *sp;
 	int r;
+	static const ssize_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 
 	(void)offset; /* UNUSED */
 
@@ -2427,13 +2431,15 @@ zip_read_data_deflate(struct archive_read *a, const void **buff,
 	 * cast to remove 'const'.
 	 */
 	zip->stream.next_in = (Bytef *)(uintptr_t)(const void *)compressed_buff;
+	if (bytes_avail > max_decode_size)
+		bytes_avail = max_decode_size;
 	zip->stream.avail_in = (uInt)bytes_avail;
 	zip->stream.total_in = 0;
 	zip->stream.next_out = zip->uncompressed_buffer;
 	zip->stream.avail_out = (uInt)zip->uncompressed_buffer_size;
 	zip->stream.total_out = 0;
 
-	r = inflate(&zip->stream, 0);
+	r = inflate(&zip->stream, Z_NO_FLUSH);
 	switch (r) {
 	case Z_OK:
 		break;
@@ -3894,6 +3900,7 @@ zip_read_mac_metadata(struct archive_read *a, struct archive_entry *entry,
 	size_t remaining_bytes, metadata_bytes;
 	ssize_t hsize;
 	int ret = ARCHIVE_OK, eof;
+	static const ssize_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 
 	switch(rsrc->compression) {
 	case 0:  /* No compression. */
@@ -3987,13 +3994,15 @@ zip_read_mac_metadata(struct archive_read *a, struct archive_entry *entry,
 				goto exit_mac_metadata;
 			zip->stream.next_in =
 			    (Bytef *)(uintptr_t)(const void *)p;
+			if (bytes_avail > max_decode_size)
+				bytes_avail = max_decode_size;
 			zip->stream.avail_in = (uInt)bytes_avail;
 			zip->stream.total_in = 0;
 			zip->stream.next_out = mp;
 			zip->stream.avail_out = (uInt)metadata_bytes;
 			zip->stream.total_out = 0;
 
-			r = inflate(&zip->stream, 0);
+			r = inflate(&zip->stream, Z_NO_FLUSH);
 			switch (r) {
 			case Z_OK:
 				break;

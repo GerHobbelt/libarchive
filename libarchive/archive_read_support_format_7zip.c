@@ -1456,7 +1456,7 @@ decompress(struct archive_read *a, struct _7zip *zip,
 		zip->stream.avail_in = (uInt)t_avail_in;
 		zip->stream.next_out = t_next_out;
 		zip->stream.avail_out = (uInt)t_avail_out;
-		r = inflate(&(zip->stream), 0);
+		r = inflate(&(zip->stream), Z_NO_FLUSH);
 		switch (r) {
 		case Z_STREAM_END: /* Found end of stream. */
 			ret = ARCHIVE_EOF;
@@ -3021,6 +3021,7 @@ get_uncompressed_data(struct archive_read *a, const void **buff, size_t size,
 static ssize_t
 extract_pack_stream(struct archive_read *a, size_t minimum)
 {
+	static const size_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 	struct _7zip *zip = (struct _7zip *)a->format->data;
 	ssize_t bytes_avail;
 	int r;
@@ -3130,6 +3131,8 @@ extract_pack_stream(struct archive_read *a, size_t minimum)
 		bytes_in = bytes_avail;
 		if (bytes_in > zip->pack_stream_inbytes_remaining)
 			bytes_in = (size_t)zip->pack_stream_inbytes_remaining;
+		if (bytes_in > max_decode_size)
+			bytes_in = max_decode_size;
 		/* Drive decompression. */
 		r = decompress(a, zip, buff_out, &bytes_out,
 			buff_in, &bytes_in);

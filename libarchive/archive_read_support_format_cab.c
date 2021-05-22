@@ -1398,6 +1398,7 @@ cab_read_ahead_cfdata_none(struct archive_read *a, ssize_t *avail)
 static const void *
 cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 {
+	static const ssize_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 	struct cab *cab = (struct cab *)(a->format->data);
 	struct cfdata *cfdata;
 	const void *d;
@@ -1474,6 +1475,8 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 		}
 		if (bytes_avail > cfdata->compressed_bytes_remaining)
 			bytes_avail = cfdata->compressed_bytes_remaining;
+		if (bytes_avail > max_decode_size)
+			bytes_avail = max_decode_size;
 		/*
 		 * A bug in zlib.h: stream.next_in should be marked 'const'
 		 * but isn't (the library never alters data through the
@@ -1518,7 +1521,7 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 			mszip = 0;
 		}
 
-		r = inflate(&cab->stream, 0);
+		r = inflate(&cab->stream, Z_NO_FLUSH);
 		switch (r) {
 		case Z_OK:
 			break;
