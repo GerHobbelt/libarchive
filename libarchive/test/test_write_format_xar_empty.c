@@ -28,7 +28,7 @@
  * Development supported by Google Summer of Code 2008.
  */
 
-#include "test.h"
+#include "./test.h"
 __FBSDID("$FreeBSD$");
 
 DEFINE_TEST(test_write_format_xar_empty)

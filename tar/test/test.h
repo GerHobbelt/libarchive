@@ -25,7 +25,7 @@
  * $FreeBSD$
  */
 
-/* Every test program should #include "test.h" as the first thing. */
+/* Every test program should #include "./test.h" as the first thing. */
 
 #define KNOWNREF	"test_patterns_2.tar.uu"
 #define ENVBASE "BSDTAR"  /* Prefix for environment variables. */

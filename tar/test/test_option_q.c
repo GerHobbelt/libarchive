@@ -22,7 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "test.h"
+#include "./test.h"
 __FBSDID("$FreeBSD: src/usr.bin/tar/test/test_option_q.c,v 1.3 2008/08/22 01:35:08 kientzle Exp $");
 
 DEFINE_TEST(test_option_q)

@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "test.h"
+#include "./test.h"
 __FBSDID("$FreeBSD$");
 
 #define should(__a, __code, __m, __o, __v) \

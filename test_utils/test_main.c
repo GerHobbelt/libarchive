@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "test.h"
+#include "./test.h"
 #include "test_utils.h"
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>

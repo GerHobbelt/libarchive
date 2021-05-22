@@ -22,7 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "test.h"
+#include "./test.h"
 __FBSDID("$FreeBSD: src/lib/libarchive/test/test_read_truncated.c,v 1.4 2008/09/01 05:38:33 kientzle Exp $");
 
 static char buff[1000000];

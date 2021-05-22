@@ -23,7 +23,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "test.h"
+#include "./test.h"
 __FBSDID("$FreeBSD: head/lib/libarchive/test/test_read_uu.c 201248 2009-12-30 06:12:03Z kientzle $");
 
 static const char archive[] = {

@@ -24,7 +24,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "test.h"
+#include "./test.h"
 __FBSDID("$FreeBSD$");
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>

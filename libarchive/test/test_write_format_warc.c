@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "test.h"
+#include "./test.h"
 __FBSDID("$FreeBSD$");
 
 static void test_read(struct archive *a, char *buff, size_t used, char *filedata)

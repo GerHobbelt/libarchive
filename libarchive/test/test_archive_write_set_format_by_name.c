@@ -24,7 +24,7 @@
  */
 
 
-#include "test.h"
+#include "./test.h"
 __FBSDID("$FreeBSD$");
 
 static void

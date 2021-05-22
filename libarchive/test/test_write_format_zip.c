@@ -29,7 +29,7 @@
  * Development supported by Google Summer of Code 2008.
  */
 
-#include "test.h"
+#include "./test.h"
 __FBSDID("$FreeBSD: head/lib/libarchive/test/test_write_format_zip.c 201247 2009-12-30 05:59:21Z kientzle $");
 
 /*

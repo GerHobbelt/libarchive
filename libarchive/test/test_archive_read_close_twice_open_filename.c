@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "test.h"
+#include "./test.h"
 __FBSDID("$FreeBSD$");
 
 DEFINE_TEST(test_archive_read_close_twice_open_filename)
