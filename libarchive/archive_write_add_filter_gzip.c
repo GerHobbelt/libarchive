@@ -40,6 +40,9 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_write_set_compression_gzip.c 201
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 #include "archive.h"
 #include "archive_private.h"
@@ -61,7 +64,7 @@ struct private_data {
 	int		 compression_level;
 	int		 timestamp;
 #ifdef HAVE_ZLIB_H
-	z_stream	 stream;
+	zng_stream	 stream;
 	int64_t		 total_in;
 	unsigned char	*compressed;
 	size_t		 compressed_buffer_size;
@@ -235,7 +238,7 @@ archive_compressor_gzip_open(struct archive_write_filter *f)
 	f->write = archive_compressor_gzip_write;
 
 	/* Initialize compression library. */
-	ret = deflateInit2(&(data->stream),
+	ret = zng_deflateInit2(&(data->stream),
 	    data->compression_level,
 	    Z_DEFLATED,
 	    -15 /* < 0 to suppress zlib header */,
@@ -326,7 +329,7 @@ archive_compressor_gzip_close(struct archive_write_filter *f)
 		ret = __archive_write_filter(f->next_filter, trailer, 8);
 	}
 
-	switch (deflateEnd(&(data->stream))) {
+	switch (zng_deflateEnd(&(data->stream))) {
 	case Z_OK:
 		break;
 	default:
@@ -366,7 +369,7 @@ drive_compressor(struct archive_write_filter *f,
 		if (!finishing && data->stream.avail_in == 0)
 			return (ARCHIVE_OK);
 
-		ret = deflate(&(data->stream),
+		ret = zng_deflate(&(data->stream),
 		    finishing ? Z_FINISH : Z_NO_FLUSH );
 
 		switch (ret) {

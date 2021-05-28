@@ -133,6 +133,9 @@ __FBSDID("$FreeBSD$");
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 /* TODO: Support Mac OS 'quarantine' feature.  This is really just a
  * standard tag to mark files that have been downloaded as "tainted".
@@ -304,7 +307,7 @@ struct archive_write_disk {
 	size_t			 block_remaining_bytes;
 	size_t			 file_remaining_bytes;
 #ifdef HAVE_ZLIB_H
-	z_stream		 stream;
+	zng_stream		 stream;
 	int			 stream_valid;
 	int			 decmpfs_compression_level;
 #endif
@@ -1191,9 +1194,9 @@ hfs_reset_compressor(struct archive_write_disk *a)
 	int ret;
 
 	if (a->stream_valid)
-		ret = deflateReset(&a->stream);
+		ret = zng_deflateReset(&a->stream);
 	else
-		ret = deflateInit(&a->stream, a->decmpfs_compression_level);
+		ret = zng_deflateInit(&a->stream, a->decmpfs_compression_level);
 
 	if (ret != Z_OK) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
@@ -1283,7 +1286,7 @@ hfs_drive_compressor(struct archive_write_disk *a, const char *buff,
 		size_t block_size;
 
 		block_size = COMPRESSED_W_SIZE + RSRC_F_SIZE +
-		    + compressBound(MAX_DECMPFS_BLOCK_SIZE);
+		    +zng_compressBound(MAX_DECMPFS_BLOCK_SIZE);
 		a->compressed_buffer = malloc(block_size);
 		if (a->compressed_buffer == NULL) {
 			archive_set_error(&a->archive, ENOMEM,
@@ -1301,7 +1304,7 @@ hfs_drive_compressor(struct archive_write_disk *a, const char *buff,
 	a->stream.next_out = buffer_compressed;
 	a->stream.avail_out = a->compressed_buffer_remaining;
 	do {
-		ret = deflate(&a->stream, Z_FINISH);
+		ret = zng_deflate(&a->stream, Z_FINISH);
 		switch (ret) {
 		case Z_OK:
 		case Z_STREAM_END:
@@ -2536,7 +2539,7 @@ _archive_write_disk_free(struct archive *_a)
 #if defined(__APPLE__) && defined(UF_COMPRESSED) && defined(HAVE_SYS_XATTR_H)\
 	&& defined(HAVE_ZLIB_H)
 	if (a->stream_valid) {
-		switch (deflateEnd(&a->stream)) {
+		switch (zng_deflateEnd(&a->stream)) {
 		case Z_OK:
 			break;
 		default:

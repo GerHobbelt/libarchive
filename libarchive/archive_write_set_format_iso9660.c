@@ -49,6 +49,9 @@
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 #include "archive.h"
 #include "archive_endian.h"
@@ -779,7 +782,7 @@ struct iso9660 {
 		int64_t		 total_size;
 		int64_t		 block_offset;
 
-		z_stream	 stream;
+		zng_stream	 stream;
 		int		 stream_valid;
 		int64_t		 remaining;
 		int		 compression_level;
@@ -7380,9 +7383,9 @@ zisofs_init_zstream(struct archive_write *a)
 	iso9660->zisofs.stream.total_in = 0;
 	iso9660->zisofs.stream.total_out = 0;
 	if (iso9660->zisofs.stream_valid)
-		r = deflateReset(&(iso9660->zisofs.stream));
+		r = zng_deflateReset(&(iso9660->zisofs.stream));
 	else {
-		r = deflateInit(&(iso9660->zisofs.stream),
+		r = zng_deflateInit(&(iso9660->zisofs.stream),
 		    iso9660->zisofs.compression_level);
 		iso9660->zisofs.stream_valid = 1;
 	}
@@ -7598,7 +7601,7 @@ zisofs_write_to_temp(struct archive_write *a, const void *buff, size_t s)
 	struct iso9660 *iso9660 = a->format_data;
 	struct isofile *file = iso9660->cur_file;
 	const unsigned char *b;
-	z_stream *zstrm;
+	zng_stream *zstrm;
 	size_t avail, csize;
 	int flush, r;
 
@@ -7664,7 +7667,7 @@ zisofs_write_to_temp(struct archive_write *a, const void *buff, size_t s)
 		 */
 		while (zstrm->avail_in > 0) {
 			csize = zstrm->total_out;
-			r = deflate(zstrm, flush);
+			r = zng_deflate(zstrm, flush);
 			switch (r) {
 			case Z_OK:
 			case Z_STREAM_END:
@@ -7785,7 +7788,7 @@ zisofs_free(struct archive_write *a)
 
 	free(iso9660->zisofs.block_pointers);
 	if (iso9660->zisofs.stream_valid &&
-	    deflateEnd(&(iso9660->zisofs.stream)) != Z_OK) {
+		zng_deflateEnd(&(iso9660->zisofs.stream)) != Z_OK) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 		    "Failed to clean up compressor");
 		ret = ARCHIVE_FATAL;
@@ -7810,7 +7813,7 @@ struct zisofs_extract {
 	size_t		 block_off;
 	uint32_t	 block_avail;
 
-	z_stream	 stream;
+	zng_stream	 stream;
 	int		 stream_valid;
 };
 
@@ -7950,9 +7953,9 @@ zisofs_extract(struct archive_write *a, struct zisofs_extract *zisofs,
 
 		/* Initialize compression library for new block. */
 		if (zisofs->stream_valid)
-			r = inflateReset(&zisofs->stream);
+			r = zng_inflateReset(&zisofs->stream);
 		else
-			r = inflateInit(&zisofs->stream);
+			r = zng_inflateInit(&zisofs->stream);
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Can't initialize zisofs decompression.");
@@ -7995,7 +7998,7 @@ zisofs_extract(struct archive_write *a, struct zisofs_extract *zisofs,
 		zisofs->stream.next_out = wb_buffptr(a);
 		zisofs->stream.avail_out = (uInt)wb_remaining(a);
 
-		r = inflate(&zisofs->stream, Z_NO_FLUSH);
+		r = zng_inflate(&zisofs->stream, Z_NO_FLUSH);
 		switch (r) {
 		case Z_OK: /* Decompressor made some progress.*/
 		case Z_STREAM_END: /* Found end of stream. */
@@ -8111,7 +8114,7 @@ zisofs_rewind_boot_file(struct archive_write *a)
 	 */
 	free(rbuff);
 	free(zext.block_pointers);
-	if (zext.stream_valid && inflateEnd(&(zext.stream)) != Z_OK) {
+	if (zext.stream_valid && zng_inflateEnd(&(zext.stream)) != Z_OK) {
         	archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 		    "Failed to clean up compressor");
 		ret = ARCHIVE_FATAL;

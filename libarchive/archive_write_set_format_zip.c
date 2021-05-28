@@ -47,6 +47,9 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_write_set_format_zip.c 201168 20
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 #include "archive.h"
 #include "archive_cryptor_private.h"
@@ -167,7 +170,7 @@ struct zip {
 	int flags;
 
 #ifdef HAVE_ZLIB_H
-	z_stream stream;
+	zng_stream stream;
 #endif
 	size_t len_buf;
 	unsigned char *buf;
@@ -988,7 +991,7 @@ archive_write_zip_header(struct archive_write *a, struct archive_entry *entry)
 		zip->stream.opaque = Z_NULL;
 		zip->stream.next_out = zip->buf;
 		zip->stream.avail_out = (uInt)zip->len_buf;
-		if (deflateInit2(&zip->stream, zip->deflate_compression_level,
+		if (zng_deflateInit2(&zip->stream, zip->deflate_compression_level,
 		    Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
 			archive_set_error(&a->archive, ENOMEM,
 			    "Can't init deflate compressor");
@@ -1085,7 +1088,7 @@ archive_write_zip_data(struct archive_write *a, const void *buff, size_t s)
 		zip->stream.next_in = (unsigned char*)(uintptr_t)buff;
 		zip->stream.avail_in = (uInt)s;
 		do {
-			ret = deflate(&zip->stream, Z_NO_FLUSH);
+			ret = zng_deflate(&zip->stream, Z_NO_FLUSH);
 			if (ret == Z_STREAM_ERROR)
 				return (ARCHIVE_FATAL);
 			if (zip->stream.avail_out == 0) {
@@ -1147,7 +1150,7 @@ archive_write_zip_finish_entry(struct archive_write *a)
 		for (;;) {
 			size_t remainder;
 
-			ret = deflate(&zip->stream, Z_FINISH);
+			ret = zng_deflate(&zip->stream, Z_FINISH);
 			if (ret == Z_STREAM_ERROR)
 				return (ARCHIVE_FATAL);
 			remainder = zip->len_buf - zip->stream.avail_out;
@@ -1178,7 +1181,7 @@ archive_write_zip_finish_entry(struct archive_write *a)
 				break;
 			zip->stream.avail_out = (uInt)zip->len_buf;
 		}
-		deflateEnd(&zip->stream);
+		zng_deflateEnd(&zip->stream);
 	}
 #endif
 	if (zip->hctx_valid) {

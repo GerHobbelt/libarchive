@@ -34,6 +34,9 @@
 #ifdef HAVE_ZLIB_H
 #include <zlib.h> /* crc32 */
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 #include "archive.h"
 #ifndef HAVE_ZLIB_H

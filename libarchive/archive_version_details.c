@@ -36,6 +36,9 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_util.c 201098 2009-12-28 02:58:1
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 #ifdef HAVE_LZMA_H
 #include <lzma.h>
 #endif

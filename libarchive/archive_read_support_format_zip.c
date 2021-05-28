@@ -52,6 +52,9 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_read_support_format_zip.c 201102
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 #ifdef HAVE_BZLIB_H
 #include <bzlib.h>
 #endif
@@ -177,7 +180,7 @@ struct zip {
 	size_t 			uncompressed_buffer_size;
 
 #ifdef HAVE_ZLIB_H
-	z_stream		stream;
+	zng_stream		stream;
 	char			stream_valid;
 #endif
 
@@ -2311,9 +2314,9 @@ zip_deflate_init(struct archive_read *a, struct zip *zip)
 	/* If we haven't yet read any data, initialize the decompressor. */
 	if (!zip->decompress_init) {
 		if (zip->stream_valid)
-			r = inflateReset(&zip->stream);
+			r = zng_inflateReset(&zip->stream);
 		else
-			r = inflateInit2(&zip->stream,
+			r = zng_inflateInit2(&zip->stream,
 			    -15 /* Don't check for zlib header */);
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
@@ -2439,7 +2442,7 @@ zip_read_data_deflate(struct archive_read *a, const void **buff,
 	zip->stream.avail_out = (uInt)zip->uncompressed_buffer_size;
 	zip->stream.total_out = 0;
 
-	r = inflate(&zip->stream, Z_NO_FLUSH);
+	r = zng_inflate(&zip->stream, Z_NO_FLUSH);
 	switch (r) {
 	case Z_OK:
 		break;
@@ -3000,7 +3003,7 @@ archive_read_format_zip_cleanup(struct archive_read *a)
 
 #ifdef HAVE_ZLIB_H
 	if (zip->stream_valid)
-		inflateEnd(&zip->stream);
+		zng_inflateEnd(&zip->stream);
 #endif
 
 #if HAVE_LZMA_H && HAVE_LIBLZMA
@@ -4002,7 +4005,7 @@ zip_read_mac_metadata(struct archive_read *a, struct archive_entry *entry,
 			zip->stream.avail_out = (uInt)metadata_bytes;
 			zip->stream.total_out = 0;
 
-			r = inflate(&zip->stream, Z_NO_FLUSH);
+			r = zng_inflate(&zip->stream, Z_NO_FLUSH);
 			switch (r) {
 			case Z_OK:
 				break;

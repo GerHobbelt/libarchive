@@ -40,6 +40,9 @@
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_H
+#include <zlib-ng.h>
+#endif
 
 #include "archive.h"
 #include "archive_entry.h"
@@ -297,7 +300,7 @@ struct cab {
 	char			 format_name[64];
 
 #ifdef HAVE_ZLIB_H
-	z_stream		 stream;
+	zng_stream		 stream;
 	char			 stream_valid;
 #endif
 	struct lzx_stream	 xstrm;
@@ -1435,9 +1438,9 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 		cab->stream.avail_out = 0;
 		cab->stream.total_out = 0;
 		if (cab->stream_valid)
-			r = inflateReset(&cab->stream);
+			r = zng_inflateReset(&cab->stream);
 		else
-			r = inflateInit2(&cab->stream,
+			r = zng_inflateInit2(&cab->stream,
 			    -15 /* Don't check for zlib header */);
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
@@ -1521,7 +1524,7 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 			mszip = 0;
 		}
 
-		r = inflate(&cab->stream, Z_NO_FLUSH);
+		r = zng_inflate(&cab->stream, Z_NO_FLUSH);
 		switch (r) {
 		case Z_OK:
 			break;
@@ -1580,10 +1583,10 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 	 */
 	if (cab->entry_cffolder->cfdata_index <
 	    cab->entry_cffolder->cfdata_count) {
-		r = inflateReset(&cab->stream);
+		r = zng_inflateReset(&cab->stream);
 		if (r != Z_OK)
 			goto zlibfailed;
-		r = inflateSetDictionary(&cab->stream,
+		r = zng_inflateSetDictionary(&cab->stream,
 		    cab->uncompressed_buffer, cfdata->uncompressed_size);
 		if (r != Z_OK)
 			goto zlibfailed;
@@ -2030,7 +2033,7 @@ archive_read_format_cab_cleanup(struct archive_read *a)
 	}
 #ifdef HAVE_ZLIB_H
 	if (cab->stream_valid)
-		inflateEnd(&cab->stream);
+		zng_inflateEnd(&cab->stream);
 #endif
 	lzx_decode_free(&cab->xstrm);
 	archive_wstring_free(&cab->ws);

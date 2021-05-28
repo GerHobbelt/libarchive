@@ -39,6 +39,9 @@ __FBSDID("$FreeBSD$");
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 #include "archive.h"
 #ifndef HAVE_ZLIB_H
@@ -1677,7 +1680,7 @@ static int
 compression_init_encoder_deflate(struct archive *a,
     struct la_zstream *lastrm, int level, int withheader)
 {
-	z_stream *strm;
+	zng_stream *strm;
 
 	if (lastrm->valid)
 		compression_end(a, lastrm);
@@ -1696,7 +1699,7 @@ compression_init_encoder_deflate(struct archive *a,
 	strm->next_out = lastrm->next_out;
 	strm->avail_out = (uInt)lastrm->avail_out;
 	strm->total_out = (uLong)lastrm->total_out;
-	if (deflateInit2(strm, level, Z_DEFLATED,
+	if (zng_deflateInit2(strm, level, Z_DEFLATED,
 	    (withheader)?15:-15,
 	    8, Z_DEFAULT_STRATEGY) != Z_OK) {
 		free(strm);
@@ -1716,10 +1719,10 @@ static int
 compression_code_deflate(struct archive *a,
     struct la_zstream *lastrm, enum la_zaction action)
 {
-	z_stream *strm;
+	zng_stream *strm;
 	int r;
 
-	strm = (z_stream *)lastrm->real_stream;
+	strm = (zng_stream *)lastrm->real_stream;
 	/* zlib.h is not const-correct, so we need this one bit
 	 * of ugly hackery to convert a const * pointer to
 	 * a non-const pointer. */
@@ -1729,7 +1732,7 @@ compression_code_deflate(struct archive *a,
 	strm->next_out = lastrm->next_out;
 	strm->avail_out = (uInt)lastrm->avail_out;
 	strm->total_out = (uLong)lastrm->total_out;
-	r = deflate(strm,
+	r = zng_deflate(strm,
 	    (action == ARCHIVE_Z_FINISH)? Z_FINISH: Z_NO_FLUSH);
 	lastrm->next_in = strm->next_in;
 	lastrm->avail_in = strm->avail_in;
@@ -1753,11 +1756,11 @@ compression_code_deflate(struct archive *a,
 static int
 compression_end_deflate(struct archive *a, struct la_zstream *lastrm)
 {
-	z_stream *strm;
+	zng_stream *strm;
 	int r;
 
-	strm = (z_stream *)lastrm->real_stream;
-	r = deflateEnd(strm);
+	strm = (zng_stream *)lastrm->real_stream;
+	r = zng_deflateEnd(strm);
 	free(strm);
 	lastrm->real_stream = NULL;
 	lastrm->valid = 0;

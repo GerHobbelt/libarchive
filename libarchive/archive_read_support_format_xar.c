@@ -47,6 +47,9 @@ __FBSDID("$FreeBSD$");
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 #include "archive.h"
 #include "archive_digest_private.h"
@@ -326,7 +329,7 @@ struct xar {
 	 * For Decoding data.
 	 */
 	enum enctype 		 rd_encoding;
-	z_stream		 stream;
+	zng_stream		 stream;
 	int			 stream_valid;
 #if defined(HAVE_BZLIB_H) && defined(BZ_CONFIG_ERROR)
 	bz_stream		 bzstream;
@@ -1462,9 +1465,9 @@ decompression_init(struct archive_read *a, enum enctype encoding)
 		break;
 	case GZIP:
 		if (xar->stream_valid)
-			r = inflateReset(&(xar->stream));
+			r = zng_inflateReset(&(xar->stream));
 		else
-			r = inflateInit(&(xar->stream));
+			r = zng_inflateInit(&(xar->stream));
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Couldn't initialize zlib stream.");
@@ -1619,7 +1622,7 @@ decompress(struct archive_read *a, const void **buff, size_t *outbytes,
 		xar->stream.avail_in = avail_in;
 		xar->stream.next_out = (unsigned char *)outbuff;
 		xar->stream.avail_out = avail_out;
-		r = inflate(&(xar->stream), Z_NO_FLUSH);
+		r = zng_inflate(&(xar->stream), Z_NO_FLUSH);
 		switch (r) {
 		case Z_OK: /* Decompressor made some progress.*/
 		case Z_STREAM_END: /* Found end of stream. */
@@ -1725,7 +1728,7 @@ decompression_cleanup(struct archive_read *a)
 	xar = (struct xar *)(a->format->data);
 	r = ARCHIVE_OK;
 	if (xar->stream_valid) {
-		if (inflateEnd(&(xar->stream)) != Z_OK) {
+		if (zng_inflateEnd(&(xar->stream)) != Z_OK) {
 			archive_set_error(&a->archive,
 			    ARCHIVE_ERRNO_MISC,
 			    "Failed to clean up zlib decompressor");

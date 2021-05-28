@@ -46,6 +46,9 @@ __FBSDID("$FreeBSD$");
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 #include "archive.h"
 #include "archive_entry.h"
@@ -55,7 +58,7 @@ __FBSDID("$FreeBSD$");
 
 #ifdef HAVE_ZLIB_H
 struct private_data {
-	z_stream	 stream;
+	zng_stream	 stream;
 	char		 in_stream;
 	unsigned char	*out_block;
 	size_t		 out_block_size;
@@ -352,7 +355,7 @@ consume_header(struct archive_read_filter *self)
 	state->stream.next_in = (unsigned char *)(uintptr_t)
 	    __archive_read_filter_ahead(self->upstream, 1, &avail);
 	state->stream.avail_in = (uInt)avail;
-	ret = inflateInit2(&(state->stream),
+	ret = zng_inflateInit2(&(state->stream),
 	    -15 /* Don't check for zlib header */);
 
 	/* Decipher the error code. */
@@ -397,7 +400,7 @@ consume_trailer(struct archive_read_filter *self)
 	state = (struct private_data *)self->data;
 
 	state->in_stream = 0;
-	switch (inflateEnd(&(state->stream))) {
+	switch (zng_inflateEnd(&(state->stream))) {
 	case Z_OK:
 		break;
 	default:
@@ -468,7 +471,7 @@ gzip_filter_read(struct archive_read_filter *self, const void **p)
 		state->stream.avail_in = (uInt)avail_in;
 
 		/* Decompress and consume some of that data. */
-		ret = inflate(&(state->stream), Z_NO_FLUSH);
+		ret = zng_inflate(&(state->stream), Z_NO_FLUSH);
 		switch (ret) {
 		case Z_OK: /* Decompressor made some progress. */
 			__archive_read_filter_consume(self->upstream,
@@ -515,7 +518,7 @@ gzip_filter_close(struct archive_read_filter *self)
 	ret = ARCHIVE_OK;
 
 	if (state->in_stream) {
-		switch (inflateEnd(&(state->stream))) {
+		switch (zng_inflateEnd(&(state->stream))) {
 		case Z_OK:
 			break;
 		default:

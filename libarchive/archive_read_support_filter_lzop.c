@@ -52,6 +52,9 @@ __FBSDID("$FreeBSD$");
 #ifdef HAVE_ZLIB_H
 #include <zlib.h> /* for crc32 and adler32 */
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 #include "archive.h"
 #if !defined(HAVE_ZLIB_H) &&\

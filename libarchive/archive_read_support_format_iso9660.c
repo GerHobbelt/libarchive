@@ -43,6 +43,9 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_read_support_format_iso9660.c 20
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 #include "archive.h"
 #include "archive_endian.h"
@@ -241,7 +244,7 @@ struct zisofs {
 	size_t		 block_off;
 	uint32_t	 block_avail;
 
-	z_stream	 stream;
+	zng_stream	 stream;
 	int		 stream_valid;
 };
 #else
@@ -1569,9 +1572,9 @@ zisofs_read_data(struct archive_read *a,
 
 		/* Initialize compression library for new block. */
 		if (zisofs->stream_valid)
-			r = inflateReset(&zisofs->stream);
+			r = zng_inflateReset(&zisofs->stream);
 		else
-			r = inflateInit(&zisofs->stream);
+			r = zng_inflateInit(&zisofs->stream);
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Can't initialize zisofs decompression.");
@@ -1599,7 +1602,7 @@ zisofs_read_data(struct archive_read *a,
 		zisofs->stream.avail_out =
 		    (uInt)zisofs->uncompressed_buffer_size;
 
-		r = inflate(&zisofs->stream, Z_NO_FLUSH);
+		r = zng_inflate(&zisofs->stream, Z_NO_FLUSH);
 		switch (r) {
 		case Z_OK: /* Decompressor made some progress.*/
 		case Z_STREAM_END: /* Found end of stream. */
@@ -1729,7 +1732,7 @@ archive_read_format_iso9660_cleanup(struct archive_read *a)
 	free(iso9660->entry_zisofs.uncompressed_buffer);
 	free(iso9660->entry_zisofs.block_pointers);
 	if (iso9660->entry_zisofs.stream_valid) {
-		if (inflateEnd(&iso9660->entry_zisofs.stream) != Z_OK) {
+		if (zng_inflateEnd(&iso9660->entry_zisofs.stream) != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Failed to clean up zlib decompressor");
 			r = ARCHIVE_FATAL;

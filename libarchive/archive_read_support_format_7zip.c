@@ -41,6 +41,9 @@ __FBSDID("$FreeBSD$");
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 #include "archive.h"
 #include "archive_entry.h"
@@ -275,7 +278,7 @@ struct _7zip {
 #endif
 	/* Decoding deflate data. */
 #ifdef HAVE_ZLIB_H
-	z_stream		 stream;
+	zng_stream		 stream;
 	int			 stream_valid;
 #endif
 	/* Decoding PPMd data. */
@@ -1209,9 +1212,9 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 	case _7Z_DEFLATE:
 #ifdef HAVE_ZLIB_H
 		if (zip->stream_valid)
-			r = inflateReset(&(zip->stream));
+			r = zng_inflateReset(&(zip->stream));
 		else
-			r = inflateInit2(&(zip->stream),
+			r = zng_inflateInit2(&(zip->stream),
 			    -15 /* Don't check for zlib header */);
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
@@ -1456,7 +1459,7 @@ decompress(struct archive_read *a, struct _7zip *zip,
 		zip->stream.avail_in = (uInt)t_avail_in;
 		zip->stream.next_out = t_next_out;
 		zip->stream.avail_out = (uInt)t_avail_out;
-		r = inflate(&(zip->stream), Z_NO_FLUSH);
+		r = zng_inflate(&(zip->stream), Z_NO_FLUSH);
 		switch (r) {
 		case Z_STREAM_END: /* Found end of stream. */
 			ret = ARCHIVE_EOF;
@@ -1622,7 +1625,7 @@ free_decompression(struct archive_read *a, struct _7zip *zip)
 #endif
 #ifdef HAVE_ZLIB_H
 	if (zip->stream_valid) {
-		if (inflateEnd(&(zip->stream)) != Z_OK) {
+		if (zng_inflateEnd(&(zip->stream)) != Z_OK) {
 			archive_set_error(&a->archive,
 			    ARCHIVE_ERRNO_MISC,
 			    "Failed to clean up zlib decompressor");
