@@ -3532,7 +3532,24 @@ set_time(int fd, int mode, const char *name,
 	ts[1].tv_nsec = mtime_nsec;
 	if (fd >= 0)
 		return futimens(fd, ts);
-	return utimensat(AT_FDCWD, name, ts, AT_SYMLINK_NOFOLLOW);
+
+	int ret = utimensat(AT_FDCWD, name, ts, AT_SYMLINK_NOFOLLOW);
+#ifdef HAVE_LUTIMES
+	if (ret && errno == ENOENT) {
+		// utimensat doesn't seem to work on broken symlinks, try with lutimes
+
+		struct timeval times[2];
+
+		times[0].tv_sec = atime;
+		times[0].tv_usec = atime_nsec / 1000;
+		times[1].tv_sec = mtime;
+		times[1].tv_usec = mtime_nsec / 1000;
+
+		return (lutimes(name, times));
+	}
+#endif
+
+	return ret;
 
 #elif HAVE_UTIMES
 	/*
