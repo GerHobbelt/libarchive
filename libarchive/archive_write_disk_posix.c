@@ -2462,6 +2462,7 @@ _archive_write_disk_close(struct archive *_a)
 {
 	struct archive_write_disk *a = (struct archive_write_disk *)_a;
 	struct fixup_entry *next, *p;
+	struct stat st;
 	int fd, ret;
 
 	archive_check_magic(&a->archive, ARCHIVE_WRITE_DISK_MAGIC,
@@ -2479,6 +2480,20 @@ _archive_write_disk_close(struct archive *_a)
 		    (TODO_TIMES | TODO_MODE_BASE | TODO_ACLS | TODO_FFLAGS)) {
 			fd = open(p->name,
 			    O_WRONLY | O_BINARY | O_NOFOLLOW | O_CLOEXEC);
+			if (fd == -1) {
+				/* If we cannot lstat, skip entry */
+				if (lstat(p->name, &st) != 0)
+					goto skip_fixup_entry;
+				/*
+				 * If we deal with a symbolic link, mark
+				 * it in the fixup mode to ensure no
+				 * modifications are made to its target.
+				 */
+				if (S_ISLNK(st.st_mode)) {
+					p->mode &= ~S_IFMT;
+					p->mode |= S_IFLNK;
+				}
+			}
 		}
 		if (p->fixup & TODO_TIMES) {
 			set_times(a, fd, p->mode, p->name,
@@ -2493,7 +2508,12 @@ _archive_write_disk_close(struct archive *_a)
 				fchmod(fd, p->mode);
 			else
 #endif
-			chmod(p->name, p->mode);
+#ifdef HAVE_LCHMOD
+			lchmod(p->name, p->mode);
+#else
+			if (!S_ISLNK(p->mode))
+				chmod(p->name, p->mode);
+#endif
 		}
 		if (p->fixup & TODO_ACLS)
 			archive_write_disk_set_acls(&a->archive, fd,
@@ -2504,6 +2524,7 @@ _archive_write_disk_close(struct archive *_a)
 		if (p->fixup & TODO_MAC_METADATA)
 			set_mac_metadata(a, p->name, p->mac_metadata,
 					 p->mac_metadata_size);
+skip_fixup_entry:
 		next = p->next;
 		archive_acl_clear(&p->acl);
 		free(p->mac_metadata);
@@ -2644,6 +2665,7 @@ new_fixup(struct archive_write_disk *a, const char *pathname)
 	fe->next = a->fixup_list;
 	a->fixup_list = fe;
 	fe->fixup = 0;
+	fe->mode = 0;
 	fe->name = strdup(pathname);
 	return (fe);
 }
@@ -3928,7 +3950,8 @@ set_fflags_platform(struct archive_write_disk *a, int fd, const char *name,
 
 	/* If we weren't given an fd, open it ourselves. */
 	if (myfd < 0) {
-		myfd = open(name, O_RDONLY | O_NONBLOCK | O_BINARY | O_CLOEXEC);
+		myfd = open(name, O_RDONLY | O_NONBLOCK | O_BINARY |
+		    O_CLOEXEC | O_NOFOLLOW);
 		__archive_ensure_cloexec_flag(myfd);
 	}
 	if (myfd < 0)
