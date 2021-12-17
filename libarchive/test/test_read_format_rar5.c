@@ -1289,38 +1289,26 @@ DEFINE_TEST(test_read_format_rar5_block_size_is_too_small)
 	EPILOGUE();
 }
 
-DEFINE_TEST(test_read_format_rar5_decode_number_out_of_bounds_read)
+DEFINE_TEST(test_read_format_rar5_sfx)
 {
-	/* oss fuzz 30448 */
+	struct archive *a;
+	struct archive_entry *ae;
+	int bs = 10240;
+	char buff[32];
+	const char reffile[] = "test_read_format_rar5_sfx.exe";
+	const char test_txt[] = "123";
+	int size = sizeof(test_txt) - 1;
 
-	char buf[4096];
-	PROLOGUE("test_read_format_rar5_decode_number_out_of_bounds_read.rar");
+	extract_reference_file(reffile);
+	assert((a = archive_read_new()) != NULL);
+	assertA(0 == archive_read_support_filter_all(a));
+	assertA(0 == archive_read_support_format_all(a));
+	assertA(0 == archive_read_open_filename(a, reffile, bs));
 
-	/* Return codes of those calls are ignored, because this sample file
-	 * is invalid. However, the unpacker shouldn't produce any SIGSEGV
-	 * errors during processing. */
+	assertA(0 == archive_read_next_header(a, &ae));
+	assertEqualString("test.txt.txt", archive_entry_pathname(ae));
 
-	(void) archive_read_next_header(a, &ae);
-	while(0 < archive_read_data(a, buf, sizeof(buf))) {}
-
-	EPILOGUE();
+	assertA(size == archive_read_data(a, buff, size));
+	assertEqualMem(buff, test_txt, size);
 }
 
-DEFINE_TEST(test_read_format_rar5_bad_window_size_in_multiarchive_file)
-{
-	/* oss fuzz 30459 */
-
-	char buf[4096];
-	PROLOGUE("test_read_format_rar5_bad_window_sz_in_mltarc_file.rar");
-
-	/* This file is damaged, so those functions should return failure.
-	 * Additionally, SIGSEGV shouldn't be raised during execution
-	 * of those functions. */
-
-	(void) archive_read_next_header(a, &ae);
-	while(0 < archive_read_data(a, buf, sizeof(buf))) {}
-	(void) archive_read_next_header(a, &ae);
-	while(0 < archive_read_data(a, buf, sizeof(buf))) {}
-
-	EPILOGUE();
-}
