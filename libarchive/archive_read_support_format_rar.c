@@ -139,6 +139,16 @@
 #define MAX_SYMBOL_LENGTH 0xF
 #define MAX_SYMBOLS       20
 
+/* Virtual Machine Properties */
+#define VM_MEMORY_SIZE 0x40000
+#define VM_MEMORY_MASK (VM_MEMORY_SIZE - 1)
+#define PROGRAM_WORK_SIZE 0x3C000
+#define PROGRAM_GLOBAL_SIZE 0x2000
+#define PROGRAM_SYSTEM_GLOBAL_ADDRESS PROGRAM_WORK_SIZE
+#define PROGRAM_SYSTEM_GLOBAL_SIZE 0x40
+#define PROGRAM_USER_GLOBAL_ADDRESS (PROGRAM_SYSTEM_GLOBAL_ADDRESS + PROGRAM_SYSTEM_GLOBAL_SIZE)
+#define PROGRAM_USER_GLOBAL_SIZE (PROGRAM_GLOBAL_SIZE - PROGRAM_SYSTEM_GLOBAL_SIZE)
+
 /*
  * Considering L1,L2 cache miss and a calling of write system-call,
  * the best size of the output buffer(uncompressed buffer) is 128K.
@@ -217,7 +227,8 @@ struct data_block_offsets
   int64_t end_offset;
 };
 
-struct rar_program_code {
+struct rar_program_code
+{
   RARProgram *prog;
   uint8_t *staticdata;
   uint32_t staticdatalen;
@@ -229,7 +240,8 @@ struct rar_program_code {
   struct rar_program_code *next;
 };
 
-struct rar_filter {
+struct rar_filter
+{
   struct rar_program_code *prog;
   uint32_t initialregisters[8];
   uint8_t *globaldata;
@@ -241,7 +253,8 @@ struct rar_filter {
   struct rar_filter *next;
 };
 
-struct memory_bit_reader {
+struct memory_bit_reader
+{
   const uint8_t *bytes;
   size_t length;
   size_t offset;
@@ -250,8 +263,15 @@ struct memory_bit_reader {
   int at_eof;
 };
 
-struct rar_filters {
-  struct RARVirtualMachine *vm;
+struct rar_virtual_machine
+{
+  uint32_t registers[8];
+  uint8_t memory[VM_MEMORY_SIZE + sizeof(uint32_t)];
+};
+
+struct rar_filters
+{
+  struct rar_virtual_machine *vm;
   struct rar_program_code *progs;
   struct rar_filter *stack;
   int64_t filterstart;
@@ -261,7 +281,8 @@ struct rar_filters {
   size_t bytes_ready;
 };
 
-struct audio_state {
+struct audio_state
+{
   int8_t weight[5];
   int16_t delta[4];
   int8_t lastdelta;
@@ -429,15 +450,18 @@ static void delete_filter(struct rar_filter *filter);
 static struct rar_program_code *compile_program(const uint8_t *, size_t);
 static int parse_operand(struct memory_bit_reader *, uint8_t, int,
                          uint32_t, uint8_t *, uint32_t *);
-static void delete_program(struct rar_program_code *prog);
+static void delete_program_code(struct rar_program_code *prog);
 static uint32_t membr_next_rarvm_number(struct memory_bit_reader *br);
 static inline uint32_t membr_bits(struct memory_bit_reader *br, int bits);
 static inline int membr_available(struct memory_bit_reader *br, int bits);
 static int membr_fill(struct memory_bit_reader *br, int bits);
 static int read_filter(struct archive_read *, int64_t *);
 static int rar_decode_byte(struct archive_read*, uint8_t *);
-static int execute_filter(struct rar_filter *, RARVirtualMachine *, size_t);
+static int execute_filter(struct archive_read*, struct rar_filter *,
+                          struct rar_virtual_machine *, size_t);
 static int copy_from_lzss_window(struct archive_read *, void *, int64_t, int);
+static inline void vm_write_32(struct rar_virtual_machine*, size_t, uint32_t);
+static inline uint32_t vm_read_32(struct rar_virtual_machine*, size_t);
 
 /*
  * Bit stream reader.
@@ -3170,7 +3194,7 @@ parse_filter(struct archive_read *a, const uint8_t *bytes, uint16_t length, uint
     {
       delete_filter(filters->stack);
       filters->stack = NULL;
-      delete_program(filters->progs);
+      delete_program_code(filters->progs);
       filters->progs = NULL;
     }
     else
@@ -3197,10 +3221,10 @@ parse_filter(struct archive_read *a, const uint8_t *bytes, uint16_t length, uint
   else
     blocklength = prog ? prog->oldfilterlength : 0;
 
-  registers[3] = RARProgramSystemGlobalAddress;
+  registers[3] = PROGRAM_SYSTEM_GLOBAL_ADDRESS;
   registers[4] = blocklength;
   registers[5] = prog ? prog->usagecount : 0;
-  registers[7] = RARProgramMemorySize;
+  registers[7] = VM_MEMORY_SIZE;
 
   if ((flags & 0x10))
   {
@@ -3241,13 +3265,13 @@ parse_filter(struct archive_read *a, const uint8_t *bytes, uint16_t length, uint
   if ((flags & 0x08))
   {
     globaldatalen = membr_next_rarvm_number(&br);
-    if (globaldatalen > RARProgramUserGlobalSize)
+    if (globaldatalen > PROGRAM_USER_GLOBAL_SIZE)
       return 0;
-    globaldata = malloc(globaldatalen + RARProgramSystemGlobalSize);
+    globaldata = malloc(globaldatalen + PROGRAM_SYSTEM_GLOBAL_SIZE);
     if (!globaldata)
       return 0;
     for (i = 0; i < globaldatalen; i++)
-      globaldata[i + RARProgramSystemGlobalSize] = (uint8_t)membr_bits(&br, 8);
+      globaldata[i + PROGRAM_SYSTEM_GLOBAL_SIZE] = (uint8_t)membr_bits(&br, 8);
   }
 
   if (br.at_eof)
@@ -3287,7 +3311,7 @@ create_filter(struct rar_program_code *prog, const uint8_t *globaldata, uint32_t
   if (!filter)
     return NULL;
   filter->prog = prog;
-  filter->globaldatalen = globaldatalen > RARProgramSystemGlobalSize ? globaldatalen : RARProgramSystemGlobalSize;
+  filter->globaldatalen = globaldatalen > PROGRAM_SYSTEM_GLOBAL_SIZE ? globaldatalen : PROGRAM_SYSTEM_GLOBAL_SIZE;
   filter->globaldata = calloc(1, filter->globaldatalen);
   if (!filter->globaldata)
     return NULL;
@@ -3328,7 +3352,7 @@ run_filters(struct archive_read *a)
   ret = copy_from_lzss_window(a, filters->vm->memory, start, filter->blocklength);
   if (ret != ARCHIVE_OK)
     return 0;
-  if (!execute_filter(filter, filters->vm, rar->offset))
+  if (!execute_filter(a, filter, filters->vm, rar->offset))
     return 0;
 
   lastfilteraddress = filter->filteredblockaddress;
@@ -3340,7 +3364,7 @@ run_filters(struct archive_read *a)
   while ((filter = filters->stack) != NULL && (int64_t)filter->blockstartpos == filters->filterstart && filter->blocklength == lastfilterlength)
   {
     memmove(&filters->vm->memory[0], &filters->vm->memory[lastfilteraddress], lastfilterlength);
-    if (!execute_filter(filter, filters->vm, rar->offset))
+    if (!execute_filter(a, filter, filters->vm, rar->offset))
       return 0;
 
     lastfilteraddress = filter->filteredblockaddress;
@@ -3369,7 +3393,7 @@ compile_program(const uint8_t *bytes, size_t length)
 {
   struct memory_bit_reader br = { 0 };
   struct rar_program_code *prog;
-  uint32_t instrcount = 0;
+  // uint32_t instrcount = 0;
   uint8_t xor;
   size_t i;
 
@@ -3400,7 +3424,7 @@ compile_program(const uint8_t *bytes, size_t length)
     prog->staticdata = malloc(prog->staticdatalen);
     if (!prog->staticdata)
     {
-      delete_program(prog);
+      delete_program_code(prog);
       return NULL;
     }
     for (i = 0; i < prog->staticdatalen; i++)
@@ -3514,12 +3538,12 @@ static void
 clear_filters(struct rar_filters *filters)
 {
   delete_filter(filters->stack);
-  delete_program(filters->progs);
+  delete_program_code(filters->progs);
   free(filters->vm);
 }
 
 static void
-delete_program(struct rar_program_code *prog)
+delete_program_code(struct rar_program_code *prog)
 {
   while (prog)
   {
@@ -3633,14 +3657,14 @@ read_filter(struct archive_read *a, int64_t *end)
 }
 
 static int
-rar_execute_filter_delta(struct rar_filter *filter, RARVirtualMachine *vm)
+execute_filter_delta(struct rar_filter *filter, struct rar_virtual_machine *vm)
 {
   uint32_t length = filter->initialregisters[4];
   uint32_t numchannels = filter->initialregisters[0];
   uint8_t *src, *dst;
   uint32_t i, idx;
 
-  if (length > RARProgramWorkSize / 2)
+  if (length > PROGRAM_WORK_SIZE / 2)
     return 0;
 
   src = &vm->memory[0];
@@ -3659,13 +3683,13 @@ rar_execute_filter_delta(struct rar_filter *filter, RARVirtualMachine *vm)
 }
 
 static int
-rar_execute_filter_e8(struct rar_filter *filter, RARVirtualMachine *vm, size_t pos, int e9also)
+execute_filter_e8(struct rar_filter *filter, struct rar_virtual_machine *vm, size_t pos, int e9also)
 {
   uint32_t length = filter->initialregisters[4];
   uint32_t filesize = 0x1000000;
   uint32_t i;
 
-  if (length > RARProgramWorkSize || length < 4)
+  if (length > PROGRAM_WORK_SIZE || length < 4)
     return 0;
 
   for (i = 0; i <= length - 5; i++)
@@ -3673,11 +3697,11 @@ rar_execute_filter_e8(struct rar_filter *filter, RARVirtualMachine *vm, size_t p
     if (vm->memory[i] == 0xE8 || (e9also && vm->memory[i] == 0xE9))
     {
       uint32_t currpos = (uint32_t)pos + i + 1;
-      int32_t address = (int32_t)RARVirtualMachineRead32(vm, i + 1);
+      int32_t address = (int32_t)vm_read_32(vm, i + 1);
       if (address < 0 && currpos >= (uint32_t)-address)
-        RARVirtualMachineWrite32(vm, i + 1, address + filesize);
+        vm_write_32(vm, i + 1, address + filesize);
       else if (address >= 0 && (uint32_t)address < filesize)
-        RARVirtualMachineWrite32(vm, i + 1, address - currpos);
+        vm_write_32(vm, i + 1, address - currpos);
       i += 4;
     }
   }
@@ -3689,7 +3713,7 @@ rar_execute_filter_e8(struct rar_filter *filter, RARVirtualMachine *vm, size_t p
 }
 
 static int
-rar_execute_filter_rgb(struct rar_filter *filter, RARVirtualMachine *vm)
+execute_filter_rgb(struct rar_filter *filter, struct rar_virtual_machine *vm)
 {
   uint32_t stride = filter->initialregisters[0];
   uint32_t byteoffset = filter->initialregisters[1];
@@ -3697,7 +3721,7 @@ rar_execute_filter_rgb(struct rar_filter *filter, RARVirtualMachine *vm)
   uint8_t *src, *dst;
   uint32_t i, j;
 
-  if (blocklength > RARProgramWorkSize / 2 || stride > blocklength)
+  if (blocklength > PROGRAM_WORK_SIZE / 2 || stride > blocklength)
     return 0;
 
   src = &vm->memory[0];
@@ -3733,14 +3757,14 @@ rar_execute_filter_rgb(struct rar_filter *filter, RARVirtualMachine *vm)
 }
 
 static int
-rar_execute_filter_audio(struct rar_filter *filter, RARVirtualMachine *vm)
+execute_filter_audio(struct rar_filter *filter, struct rar_virtual_machine *vm)
 {
   uint32_t length = filter->initialregisters[4];
   uint32_t numchannels = filter->initialregisters[0];
   uint8_t *src, *dst;
   uint32_t i, j;
 
-  if (length > RARProgramWorkSize / 2)
+  if (length > PROGRAM_WORK_SIZE / 2)
     return 0;
 
   src = &vm->memory[0];
@@ -3839,7 +3863,7 @@ rar_execute_filter_prog(struct rar_filter *filter, RARVirtualMachine *vm)
 
 
 static int
-execute_filter(struct rar_filter *filter, RARVirtualMachine *vm, size_t pos)
+execute_filter(struct archive_read *a, struct rar_filter *filter, struct rar_virtual_machine *vm, size_t pos)
 {
   if (filter->prog->fingerprint == 0x1D0E06077D)
     return rar_execute_filter_delta(filter, vm);
@@ -3868,13 +3892,17 @@ execute_filter(struct rar_filter *filter, RARVirtualMachine *vm, size_t pos)
   archive_le32enc(&filter->globaldata[0x28], (uint32_t)((uint64_t)pos >> 32));
 
   if (!rar_execute_filter_prog(filter, vm))
+  {
+    archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT, "No support for RAR VM program filter");
     return 0;
+  }
 
   filter->filteredblockaddress = RARVirtualMachineRead32(vm, RARProgramSystemGlobalAddress + 0x20) & RARProgramMemoryMask;
   filter->filteredblocklength = RARVirtualMachineRead32(vm, RARProgramSystemGlobalAddress + 0x1C) & RARProgramMemoryMask;
   if (filter->filteredblockaddress + filter->filteredblocklength >= RARProgramMemorySize)
   {
     filter->filteredblockaddress = filter->filteredblocklength = 0;
+    archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT, "No support for RAR VM program filter");
     return 0;
   }
 
@@ -3890,7 +3918,9 @@ execute_filter(struct rar_filter *filter, RARVirtualMachine *vm, size_t pos)
     }
   }
   else
+  {
     filter->prog->globalbackuplen = 0;
+  }
 
   return 1;
 }
@@ -3905,4 +3935,16 @@ rar_decode_byte(struct archive_read *a, uint8_t *byte)
   *byte = (uint8_t)rar_br_bits(br, 8);
   rar_br_consume(br, 8);
   return 1;
+}
+
+static inline void
+vm_write_32(struct rar_virtual_machine* vm, size_t offset, uint32_t u32)
+{
+  archive_le32enc(vm->memory + offset, u32);
+}
+
+static inline uint32_t
+vm_read_32(struct rar_virtual_machine* vm, size_t offset)
+{
+  return archive_le32dec(vm->memory + offset);
 }
