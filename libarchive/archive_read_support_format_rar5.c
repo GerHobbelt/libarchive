@@ -1752,6 +1752,16 @@ static int process_head_file(struct archive_read* a, struct rar5* rar,
 		return ARCHIVE_FATAL;
 	}
 
+	/* Check if window_size is a sane value. Also, if the file is not
+	 * declared as a directory, disallow window_size == 0. */
+	if(window_size > (64 * 1024 * 1024) ||
+	    (rar->file.dir == 0 && window_size == 0))
+	{
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
+		    "Declared dictionary size is not supported.");
+		return ARCHIVE_FATAL;
+	}
+
 	if(rar->file.solid > 0) {
 		/* Re-check if current window size is the same as previous
 		 * window size (for solid files only). */
@@ -1790,16 +1800,6 @@ static int process_head_file(struct archive_read* a, struct rar5* rar,
 				rar->cstate.window_buf = new_window_buf;
 			}
 		}
-	}
-
-	/* Check if window_size is a sane value. Also, if the file is not
-	 * declared as a directory, disallow window_size == 0. */
-	if(rar->cstate.window_size > (64 * 1024 * 1024) ||
-	    (rar->file.dir == 0 && rar->cstate.window_size == 0))
-	{
-		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
-		    "Declared dictionary size is not supported.");
-		return ARCHIVE_FATAL;
 	}
 
 	if(rar->file.solid > 0 && rar->file.solid_window_size == 0) {
