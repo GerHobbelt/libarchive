@@ -127,8 +127,12 @@ static void	version(void) __LA_DEAD;
 static const char * passphrase_callback(struct archive *, void *);
 static void	passphrase_free(char *);
 
-int
-main(int argc, char *argv[])
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_cpio_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	static char buff[16384];
 	struct cpio _cpio; /* Allocated on stack. */

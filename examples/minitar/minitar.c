@@ -127,9 +127,14 @@ static void	usage(void);
 
 static int verbose = 0;
 
-int
-main(int argc, const char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_minitar_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
+
 	const char *filename = NULL;
 	int compress, flags, mode, opt;
 

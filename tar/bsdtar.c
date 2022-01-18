@@ -147,8 +147,12 @@ static char const * const vcs_files[] = {
   NULL
 };
 
-int
-main(int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_bsdtar_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	struct bsdtar		*bsdtar, bsdtar_storage;
 	int			 opt, t;

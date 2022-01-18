@@ -278,8 +278,12 @@ shar_write(char **fn, size_t nfn)
 	return (error);
 }
 
-int
-main(int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_shar_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	int opt;
 

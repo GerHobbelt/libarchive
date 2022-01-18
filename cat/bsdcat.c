@@ -48,7 +48,7 @@ static const char *bsdcat_current_path;
 static int exit_status = 0;
 
 
-void
+static void
 usage(FILE *stream, int eval)
 {
 	const char *p;
@@ -67,7 +67,7 @@ version(void)
 	exit(0);
 }
 
-void
+static void
 bsdcat_next(void)
 {
 	if (a != NULL) {
@@ -82,7 +82,7 @@ bsdcat_next(void)
 	archive_read_support_format_raw(a);
 }
 
-void
+static void
 bsdcat_print_error(void)
 {
 	lafe_warnc(0, "%s: %s",
@@ -90,7 +90,7 @@ bsdcat_print_error(void)
 	exit_status = 1;
 }
 
-void
+static void
 bsdcat_read_to_stdout(const char* filename)
 {
 	int r;
@@ -112,8 +112,12 @@ bsdcat_read_to_stdout(const char* filename)
 	a = NULL;
 }
 
-int
-main(int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_bsdcat_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	struct bsdcat *bsdcat, bsdcat_storage;
 	int c;

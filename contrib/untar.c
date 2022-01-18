@@ -210,8 +210,12 @@ untar(FILE *a, const char *path)
 	}
 }
 
-int
-main(int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_untar_contrib_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	FILE *a;
 

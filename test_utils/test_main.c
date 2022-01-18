@@ -3753,8 +3753,12 @@ success:
 	return p;
 }
 
-int
-main(int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_test_util_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	static const int limit = sizeof(tests) / sizeof(tests[0]);
 	int test_set[sizeof(tests) / sizeof(tests[0])];

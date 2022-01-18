@@ -34,8 +34,12 @@ die(char *fmt, ...)
 	exit(1);
 }
 
-int
-main(int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_tarfilter_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	char buff[8192];
 	ssize_t len;

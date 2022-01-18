@@ -102,7 +102,12 @@ static int v_print(int verbose, const char *format, ...)
 	return (r);
 }
 
-int main(int argc, char *argv[])
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_test_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	struct archive *a;
 	struct archive_entry *entry;
@@ -123,15 +128,19 @@ int main(int argc, char *argv[])
 			case 'f':
 				filename = optarg;
 				break;
+
 			case 'h':
 				printhelp();
-				exit(0);
+				return 0;
+
 			case 'q':
 				v = 0;
 				break;
+
 			case 's':
 				skip_data = 1;
 				break;
+
 			case '?':
 				if (optopt == 'f')
 					fprintf(stderr, "Option -%c requires "
@@ -143,10 +152,10 @@ int main(int argc, char *argv[])
 					fprintf(stderr, "Unknown option "
 					    "character '\\x%x'.\n", optopt);
 				usage(argv[0]);
-				exit(1);
-				break;
+				return 1;
+
 			default:
-				exit(1);
+				return 1;
 		}
 	}
 
@@ -168,7 +177,7 @@ int main(int argc, char *argv[])
 	if (r != ARCHIVE_OK) {
 		archive_read_free(a);
 		fprintf(stderr, "Invalid or unsupported data source\n");
-		exit(1);
+		return 1;
 	}
 
 	format_printed = 0;
@@ -216,9 +225,9 @@ int main(int argc, char *argv[])
 	v_print(v, "Last return code: %s (%d)\n", errnostr(r), r);
 	if (r == ARCHIVE_EOF || r == ARCHIVE_OK) {
 		archive_read_free(a);
-		exit(0);
+		return 0;
 	}
 	v_print(v, "Error string: %s\n", archive_error_string(a));
 	archive_read_free(a);
-	exit(2);
+	return 2;
 }
