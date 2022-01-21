@@ -39,13 +39,13 @@
 
 struct bsdcat {
 	/* Option parser state */
-	int		  getopt_state;
-	char		 *getopt_word;
+	int       getopt_state;
+	char     *getopt_word;
 
 	/* Miscellaneous state information */
 	int		  argc;
-	char		**argv;
-	const char	 *argument;
+	const char  **argv;
+	const char   *argument;
 };
 
 enum {
