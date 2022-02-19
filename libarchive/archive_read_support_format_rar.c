@@ -3343,7 +3343,7 @@ run_filters(struct archive_read *a)
   int ret;
 
   if (filters == NULL || filter == NULL)
-    return (0);
+    return 0;
 
   start = filters->filterstart;
   end = start + filter->blocklength;
