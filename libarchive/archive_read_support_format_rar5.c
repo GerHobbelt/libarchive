@@ -3742,11 +3742,11 @@ static int do_uncompress_file(struct archive_read* a) {
 		rar->cstate.initialized = 1;
 	}
 
-	/* Don't allow extraction if window_size is malformed. */
+	/* Don't allow extraction if window_size is invalid. */
 	if(rar->cstate.window_size == 0) {
 		archive_set_error(&a->archive,
-			ARCHIVE_ERRNO_PROGRAMMER,
-			"Malformed window size declaration in this file");
+			ARCHIVE_ERRNO_FILE_FORMAT,
+			"Invalid window size declaration in this file");
 
 		/* This should never happen in valid files. */
 		return ARCHIVE_FATAL;
