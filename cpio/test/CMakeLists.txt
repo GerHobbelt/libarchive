@@ -5,7 +5,7 @@
 ############################################
 IF(ENABLE_CPIO AND ENABLE_TEST)
   SET(bsdcpio_test_SOURCES
-    ../cmdline.c
+    ../cpio_cmdline.c
     ../../libarchive_fe/err.c
     ../../test_utils/test_utils.c
     ../../test_utils/test_main.c

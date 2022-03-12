@@ -82,7 +82,7 @@ struct cpio {
 	struct archive	 *archive;
 	struct archive	 *archive_read_disk;
 	int		  argc;
-	char		**argv;
+	const char		**argv;
 	int		  return_value; /* Value returned by main() */
 	struct archive_entry_linkresolver *linkresolver;
 

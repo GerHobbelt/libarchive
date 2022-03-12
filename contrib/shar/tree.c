@@ -49,6 +49,9 @@
 #endif
 #ifdef HAVE_DIRENT_H
 #include <dirent.h>
+#else
+// quick hack
+typedef struct DIR DIR;
 #endif
 #ifdef HAVE_ERRNO_H
 #include <errno.h>

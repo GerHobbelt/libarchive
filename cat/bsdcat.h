@@ -40,7 +40,7 @@
 struct bsdcat {
 	/* Option parser state */
 	int       getopt_state;
-	char     *getopt_word;
+	const char     *getopt_word;
 
 	/* Miscellaneous state information */
 	int		  argc;

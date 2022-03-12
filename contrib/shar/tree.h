@@ -43,7 +43,17 @@
  *      limit dir names to 32k.
  */
 
+#if defined(PLATFORM_CONFIG_H)
+ /* Use hand-built config.h in environments that need it. */
+#include PLATFORM_CONFIG_H
+#else
+ /* Not having a config.h of some sort is a serious problem. */
+#include "config.h"
+#endif
+
+#ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
+#endif
 #include <stdio.h>
 
 struct tree;

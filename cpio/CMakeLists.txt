@@ -6,7 +6,7 @@
 IF(ENABLE_CPIO)
 
   SET(bsdcpio_SOURCES
-    cmdline.c
+    cpio_cmdline.c
     cpio.c
     cpio.h
     cpio_platform.h
