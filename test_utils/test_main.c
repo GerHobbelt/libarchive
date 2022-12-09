@@ -1970,7 +1970,12 @@ assertion_make_file(const char *file, int line,
 		failure_finish(NULL);
 		return (0);
 	}
-	if (0 != chmod(path, mode)) {
+#ifdef HAVE_FCHMOD
+	if (0 != fchmod(fd, mode))
+#else
+	if (0 != chmod(path, mode))
+#endif
+	{
 		failure_start(file, line, "Could not chmod %s", path);
 		failure_finish(NULL);
 		close(fd);
@@ -3863,7 +3868,19 @@ int main(int argc, const char** argv)
 	static const int limit = sizeof(tests) / sizeof(tests[0]);
 	int test_set[sizeof(tests) / sizeof(tests[0])];
 	int i = 0, j = 0, tests_run = 0, tests_failed = 0, option;
+	int testprogdir_len;
+#ifdef PROGRAM	
+	int tmp2_len;
+#endif
 	time_t now;
+	struct tm *tmptr;
+#if defined(HAVE_LOCALTIME_R) || defined(HAVE__LOCALTIME64_S)
+	struct tm tmbuf;
+#endif
+#if defined(HAVE__LOCALTIME64_S)
+	errno_t	terr;
+	__time64_t tmptime;
+#endif
 	char *refdir_alloc = NULL;
 	const char *progname;
 	char **saved_argv;
@@ -3899,12 +3916,13 @@ int main(int argc, const char** argv)
 	 * tree.
 	 */
 	progname = p = argv[0];
-	if ((testprogdir = (char *)malloc(strlen(progname) + 1)) == NULL)
+	testprogdir_len = strlen(progname) + 1;
+	if ((testprogdir = (char *)malloc(testprogdir_len)) == NULL)
 	{
 		fprintf(stderr, "ERROR: Out of memory.");
 		exit(1);
 	}
-	strcpy(testprogdir, progname);
+	strncpy(testprogdir, progname, testprogdir_len);
 	while (*p != '\0') {
 		/* Support \ or / dir separators for Windows compat. */
 		if (*p == '/' || *p == '\\')
@@ -4046,20 +4064,21 @@ int main(int argc, const char** argv)
 #ifdef PROGRAM
 	if (testprogfile == NULL)
 	{
-		if ((tmp2 = (char *)malloc(strlen(testprogdir) + 1 +
-			strlen(PROGRAM) + 1)) == NULL)
+		tmp2_len = strlen(testprogdir) + 1 + strlen(PROGRAM) + 1;
+		if ((tmp2 = (char *)malloc(tmp2_len)) == NULL)
 		{
 			fprintf(stderr, "ERROR: Out of memory.");
 			exit(1);
 		}
-		strcpy(tmp2, testprogdir);
-		strcat(tmp2, "/");
-		strcat(tmp2, PROGRAM);
+		strncpy(tmp2, testprogdir, tmp2_len);
+		strncat(tmp2, "/", tmp2_len);
+		strncat(tmp2, PROGRAM, tmp2_len);
 		testprogfile = tmp2;
 	}
 
 	{
 		char *testprg;
+		int testprg_len;
 #if defined(_WIN32) && !defined(__CYGWIN__)
 		/* Command.com sometimes rejects '/' separators. */
 		testprg = strdup(testprogfile);
@@ -4070,10 +4089,11 @@ int main(int argc, const char** argv)
 		testprogfile = testprg;
 #endif
 		/* Quote the name that gets put into shell command lines. */
-		testprg = malloc(strlen(testprogfile) + 3);
-		strcpy(testprg, "\"");
-		strcat(testprg, testprogfile);
-		strcat(testprg, "\"");
+		testprg_len = strlen(testprogfile) + 3;
+		testprg = malloc(testprg_len);
+		strncpy(testprg, "\"", testprg_len);
+		strncat(testprg, testprogfile, testprg_len);
+		strncat(testprg, "\"", testprg_len);
 		testprog = testprg;
 	}
 #endif
@@ -4095,9 +4115,20 @@ int main(int argc, const char** argv)
 	 */
 	now = time(NULL);
 	for (i = 0; ; i++) {
+#if defined(HAVE_LOCALTIME_R)
+		tmptr = localtime_r(&now, &tmbuf);
+#elif defined(HAVE__LOCALTIME64_S)
+		tmptime = now;
+		terr = _localtime64_s(&tmbuf, &tmptime);
+		if (terr)
+			tmptr = NULL;
+		else
+			tmptr = &tmbuf;
+#else
+		tmptr = localtime(&now);
+#endif
 		strftime(tmpdir_timestamp, sizeof(tmpdir_timestamp),
-		    "%Y-%m-%dT%H.%M.%S",
-		    localtime(&now));
+		    "%Y-%m-%dT%H.%M.%S", tmptr);
 		if ((strlen(tmp) + 1 + strlen(progname) + 1 +
 		    strlen(tmpdir_timestamp) + 1 + 3) >
 		    (sizeof(tmpdir) / sizeof(char))) {
