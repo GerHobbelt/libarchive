@@ -62,7 +62,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if !defined(_MSC_VER)
 #include <unistd.h>
+#endif
 
 static void	errmsg(const char *);
 static void	extract(const char *filename, int do_extract, int flags);
