@@ -54,6 +54,8 @@
 # include <stdint.h>
 #elif !defined(__WATCOMC__) && !defined(_MSC_VER) && !defined(__INTERIX) && !defined(__BORLANDC__) && !defined(_SCO_DS) && !defined(__osf__) && !defined(__CLANG_INTTYPES_H)
 # include <inttypes.h>
+#elif defined(_MSC_VER)
+# include <stdint.h>
 #endif
 
 /* Get appropriate definitions of 64-bit integer */

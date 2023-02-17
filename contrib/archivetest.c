@@ -37,9 +37,22 @@
 #include <archive.h>
 #include <archive_entry.h>
 
+#if !defined(BUILD_MONOLITHIC)
 #if defined __MINGW32__
 #include <getopt.h>
 #endif
+#else
+#include "mupdf/fitz/getopt.h"
+
+#define getopt fz_getopt
+#define optarg fz_optarg
+#define optind fz_optind
+#endif
+
+#ifndef STDIN_FILENO
+#  define STDIN_FILENO  fileno(stdin)
+#endif
+
 
 static const char *errnostr(int e)
 {
@@ -111,7 +124,7 @@ int main(int argc, const char** argv)
 {
 	struct archive *a;
 	struct archive_entry *entry;
-	char *filename;
+	const char *filename;
 	const char *p;
 	char buffer[4096];
 	int c;
@@ -142,6 +155,7 @@ int main(int argc, const char** argv)
 				break;
 
 			case '?':
+#if !defined(MUPDF_FITZ_GETOPT_H)  // fz_getopt() will already have reported the error; besides, it doesn't support the `optopt` feature.
 				if (optopt == 'f')
 					fprintf(stderr, "Option -%c requires "
 					    "an argument.\n", optopt);
@@ -151,6 +165,7 @@ int main(int argc, const char** argv)
 				else
 					fprintf(stderr, "Unknown option "
 					    "character '\\x%x'.\n", optopt);
+#endif
 				usage(argv[0]);
 				return 1;
 

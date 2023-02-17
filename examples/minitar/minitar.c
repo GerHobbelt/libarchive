@@ -50,6 +50,12 @@
 #include <string.h>
 #if !defined(_MSC_VER)
 #include <unistd.h>
+#else
+#include <io.h>
+#include <stdint.h>
+
+#define mode_t unsigned short
+#define ssize_t int64_t
 #endif
 
 /*

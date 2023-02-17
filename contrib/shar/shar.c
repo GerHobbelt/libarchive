@@ -64,10 +64,64 @@
 #else
 #define EX_USAGE 64
 #define EX_CANTCREAT 63
+
+static void
+errx(int rv, const char* fmt, ...)
+{
+	va_list ap;
+
+	fprintf(stderr, "ERROR: ");
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	fprintf(stderr, "\n");
+	exit(rv ? rv : EXIT_FAILURE);
+}
+
+static void
+warnx(const char* fmt, ...)
+{
+	va_list ap;
+
+	fprintf(stderr, "WARNING: ");
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	fprintf(stderr, "\n");
+}
+
+static void
+warn(const char* fmt, ...)
+{
+	va_list ap;
+
+	fprintf(stderr, "WARNING: ");
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	fprintf(stderr, " : %s\n", strerror(errno));
+}
 #endif
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#ifdef HAVE_IO_H
+#include <io.h>
+#endif
+
+/* Define S_ISREG if not defined by system headers, e.g. MSVC */
+#if !defined(S_ISREG) && defined(S_IFMT) && defined(S_IFREG)
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#endif
+
+#if defined(BUILD_MONOLITHIC)
+#include "mupdf/fitz/getopt.h"
+
+#define getopt fz_getopt
+#define optarg fz_optarg
+#define optind fz_optind
+#endif
+
 
 #include "tree.h"
 
@@ -160,7 +214,9 @@ shar_write_entry(struct archive *a, const char *pathname, const char *accpath,
 			ret = ARCHIVE_WARN;
 			goto out;
 		}
-	} else if (S_ISLNK(st->st_mode)) {
+	}
+#if !defined(S_ISLNK)     // Win32 doesn't support symbolic links like that. NTFS/Win32 uses a kind of hardlinks instead.
+	else if (S_ISLNK(st->st_mode)) {
 		/* symbolic link */
 		char lnkbuff[PATH_MAX + 1];
 		int lnklen;
@@ -172,6 +228,8 @@ shar_write_entry(struct archive *a, const char *pathname, const char *accpath,
 		lnkbuff[lnklen] = '\0';
 		archive_entry_set_symlink(entry, lnkbuff);
 	}
+#endif
+
 	archive_entry_copy_stat(entry, st);
 	archive_entry_set_pathname(entry, pathname);
 	if (!S_ISREG(st->st_mode) || st->st_size == 0)

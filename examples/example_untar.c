@@ -64,6 +64,8 @@
 #include <string.h>
 #if !defined(_MSC_VER)
 #include <unistd.h>
+#else
+#include <io.h>
 #endif
 
 static void	errmsg(const char *);

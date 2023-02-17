@@ -68,6 +68,12 @@ typedef struct DIR DIR;
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#ifdef HAVE_IO_H
+#include <io.h>
+#endif
+#ifdef HAVE_STDINT_H
+#include <stdint.h>
+#endif
 
 #include "tree.h"
 

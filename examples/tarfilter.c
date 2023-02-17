@@ -21,6 +21,12 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(_MSC_VER)
+#include <stdint.h>
+#define mode_t unsigned short
+#define ssize_t int64_t
+#endif
+
 
 static void
 die(char *fmt, ...)
