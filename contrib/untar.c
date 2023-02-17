@@ -41,6 +41,11 @@
 #include <direct.h>
 #endif
 
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
+
 /* Parse an octal number, ignoring leading and trailing nonsense. */
 static int
 parseoct(const char *p, size_t n)

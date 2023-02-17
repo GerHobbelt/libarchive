@@ -215,7 +215,7 @@ shar_write_entry(struct archive *a, const char *pathname, const char *accpath,
 			goto out;
 		}
 	}
-#if !defined(S_ISLNK)     // Win32 doesn't support symbolic links like that. NTFS/Win32 uses a kind of hardlinks instead.
+#if defined(S_ISLNK)     // Win32 doesn't support symbolic links like that. NTFS/Win32 uses a kind of hardlinks instead.
 	else if (S_ISLNK(st->st_mode)) {
 		/* symbolic link */
 		char lnkbuff[PATH_MAX + 1];

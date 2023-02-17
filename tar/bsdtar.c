@@ -70,6 +70,11 @@ __FBSDID("$FreeBSD: src/usr.bin/tar/bsdtar.c,v 1.93 2008/11/08 04:43:24 kientzle
 #include "bsdtar.h"
 #include "err.h"
 
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
+
 #if ARCHIVE_VERSION_NUMBER < 4000000 && !defined(_PATH_DEFTAPE)
 // Libarchive 4.0 and later will NOT define _PATH_DEFTAPE
 // but will honor it if it's set in the build.

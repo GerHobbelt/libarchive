@@ -40,12 +40,22 @@ __FBSDID("$FreeBSD$");
 #include "bsdcat.h"
 #include "err.h"
 
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
 #define	BYTES_PER_BLOCK	(20*512)
 
 static struct archive *a;
 static struct archive_entry *ae;
 static const char *bsdcat_current_path;
 static int exit_status = 0;
+
+
+static void usage(FILE *stream, int eval);
+static void bsdcat_next(void);
+static void bsdcat_print_error(void);
+static void bsdcat_read_to_stdout(const char* filename);
 
 
 static void

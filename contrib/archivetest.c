@@ -53,6 +53,10 @@
 #  define STDIN_FILENO  fileno(stdin)
 #endif
 
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
 
 static const char *errnostr(int e)
 {

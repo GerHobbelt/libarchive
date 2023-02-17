@@ -58,6 +58,10 @@
 #define ssize_t int64_t
 #endif
 
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
 /*
  * NO_CREATE implies NO_BZIP2_CREATE and NO_GZIP_CREATE and NO_COMPRESS_CREATE.
  */

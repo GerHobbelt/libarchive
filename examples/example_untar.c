@@ -66,7 +66,21 @@
 #include <unistd.h>
 #else
 #include <io.h>
+#include <direct.h>
+
+#ifndef STDOUT_FILENO
+#  define STDOUT_FILENO  fileno(stdout)
 #endif
+
+#ifndef STDERR_FILENO
+#  define STDERR_FILENO  fileno(stderr)
+#endif
+#endif
+
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
 
 static void	errmsg(const char *);
 static void	extract(const char *filename, int do_extract, int flags);
@@ -242,13 +256,13 @@ copy_data(struct archive *ar, struct archive *aw)
 static void
 msg(const char *m)
 {
-	write(1, m, strlen(m));
+	write(STDOUT_FILENO, m, strlen(m));
 }
 
 static void
 errmsg(const char *m)
 {
-	write(2, m, strlen(m));
+	write(STDERR_FILENO, m, strlen(m));
 }
 
 static void

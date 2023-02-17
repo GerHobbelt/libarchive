@@ -91,6 +91,10 @@ __FBSDID("$FreeBSD: src/usr.bin/cpio/cpio.c,v 1.15 2008/12/06 07:30:40 kientzle 
 #define O_BINARY 0
 #endif
 
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
 struct name_cache {
 	int	probes;
 	int	hits;

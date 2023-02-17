@@ -7,12 +7,7 @@
 static int t2[(((64 * GB -1) % 671088649) == 268434537)
        && (((TB - (64 * GB -1) + 255) % 1792151290) == 305159546)? 1: -1];
 
-
-#if defined(BUILD_MONOLITHIC)
-#define main(cnt, arr)      arch_check_file_offset_main(cnt, arr)
-#endif
-
-int main(int argc, const char** argv)
+int main()
 {
   ;
   return 0;

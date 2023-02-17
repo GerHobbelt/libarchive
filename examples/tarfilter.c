@@ -25,6 +25,15 @@
 #include <stdint.h>
 #define mode_t unsigned short
 #define ssize_t int64_t
+
+ /* Define S_ISREG if not defined by system headers, e.g. MSVC */
+#if !defined(S_ISREG) && defined(S_IFMT) && defined(S_IFREG)
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#endif
+#endif
+
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
 #endif
 
 
