@@ -52,7 +52,7 @@
 #include <sys/types.h>  /* Windows requires this before sys/stat.h */
 #include <sys/stat.h>
 
-#if HAVE_DIRENT_H
+#ifdef HAVE_DIRENT_H
 #include <dirent.h>
 #endif
 #ifdef HAVE_DIRECT_H

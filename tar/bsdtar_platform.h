@@ -78,7 +78,7 @@
  * so my configure script includes an explicit test for the d_namlen
  * field.
  */
-#if HAVE_DIRENT_H
+#ifdef HAVE_DIRENT_H
 # include <dirent.h>
 # if HAVE_DIRENT_D_NAMLEN
 #  define DIRENT_NAMLEN(dirent) (dirent)->d_namlen

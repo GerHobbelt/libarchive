@@ -745,7 +745,7 @@ AC_CHECK_DECL([D_MD_ORDER],
 # (This is a bit more straightforward than, if not quite as portable as,
 # the recipe given by the autoconf maintainers.)
 AC_CHECK_MEMBER(struct dirent.d_namlen,,,
-[#if HAVE_DIRENT_H
+[#ifdef HAVE_DIRENT_H
 #include <dirent.h>
 #endif
 ])
