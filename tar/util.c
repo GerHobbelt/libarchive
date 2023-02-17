@@ -749,7 +749,7 @@ list_item_verbose(struct bsdtar *bsdtar, FILE *out, struct archive_entry *entry
 	time_t			 tim;
 	static time_t		 now;
 	struct tm		*ltime;
-#if defined(HAVE_LOCALTIME_R) || defined(HAVE_LOCALTIME_S)
+#if defined(HAVE_LOCALTIME_R) || defined(HAVE_LOCALTIME_S) || defined(HAVE__LOCALTIME64_S)
 	struct tm		tmbuf;
 #endif
 
@@ -831,8 +831,8 @@ list_item_verbose(struct bsdtar *bsdtar, FILE *out, struct archive_entry *entry
 	#elif defined(HAVE_LOCALTIME_R)
 		ltime = localtime_r(&tim, &tmbuf);
 	#elif defined(HAVE__LOCALTIME64_S)
-		tmptime = tim;
-		terr = _localtime64_s(&tmbuf, &tmptime);
+		time_t tmptime = tim;
+		errno_t terr = _localtime64_s(&tmbuf, &tmptime);
 		if (terr)
 			ltime = NULL;
 		else

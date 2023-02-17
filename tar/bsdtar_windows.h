@@ -31,6 +31,7 @@
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
+#include <inttypes.h>
 
 #ifndef PRId64
 #define	PRId64 "I64"
