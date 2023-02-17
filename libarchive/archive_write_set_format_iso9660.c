@@ -2526,9 +2526,8 @@ get_gmoffset(struct tm *tm)
 static void
 get_tmfromtime(struct tm *tm, time_t *t)
 {
-#if HAVE__LOCALTIME64_S
-	__time64_t tmp_t = (__time64_t) *t; //time_t may be shorter than 64 bits
-	_localtime64_s(tm, &tmp_t);
+#if HAVE_LOCALTIME_S
+	localtime_s(tm, t);
 #elif HAVE_LOCALTIME_R
 	tzset();
 	localtime_r(t, tm);
@@ -4079,11 +4078,8 @@ write_information_block(struct archive_write *a)
 	}
 	memset(info.s, 0, info_size);
 	opt = 0;
-#if defined(HAVE__CTIME64_S)
-	{
-		__time64_t iso9660_birth_time_tmp = (__time64_t) iso9660->birth_time; //time_t may be shorter than 64 bits
-		_ctime64_s(buf, sizeof(buf), &(iso9660_birth_time_tmp));
-	}
+#if defined(HAVE_CTIME_S)
+	ctime_s(buf, sizeof(buf), &(iso9660->birth_time));
 #elif defined(HAVE_CTIME_R)
 	ctime_r(&(iso9660->birth_time), buf);
 #else
