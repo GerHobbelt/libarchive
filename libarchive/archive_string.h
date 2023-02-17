@@ -165,11 +165,11 @@ archive_wstrcat(struct archive_wstring *, const wchar_t *);
 
 /* Copy a C string to an archive_string, resizing as necessary. */
 #define	archive_strcpy(as,p) \
-	archive_strncpy((as), (p), ((p) == NULL ? 0 : strlen(p)))
+	archive_strncpy((as), (p), (!(p) ? 0 : strlen(p)))
 #define	archive_wstrcpy(as,p) \
-	archive_wstrncpy((as), (p), ((p) == NULL ? 0 : wcslen(p)))
+	archive_wstrncpy((as), (p), (!(p) ? 0 : wcslen(p)))
 #define	archive_strcpy_l(as,p,lo) \
-	archive_strncpy_l((as), (p), ((p) == NULL ? 0 : strlen(p)), (lo))
+	archive_strncpy_l((as), (p), (!(p) ? 0 : strlen(p)), (lo))
 
 /* Copy a C string to an archive_string with limit, resizing as necessary. */
 #define	archive_strncpy(as,p,l) \
