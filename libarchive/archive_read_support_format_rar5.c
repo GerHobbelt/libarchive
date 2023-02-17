@@ -2566,14 +2566,6 @@ static int decode_number(struct archive_read* a, struct decode_table* table,
 	uint32_t pos;
 	struct rar5* rar = get_context(a);
 
-	if(rar->bits.in_addr >= rar->cstate.cur_block_size) {
-		archive_set_error(&a->archive,
-			ARCHIVE_ERRNO_PROGRAMMER,
-			"Premature end of stream during extraction of data");
-
-		return ARCHIVE_FATAL;
-	}
-
 	if(ARCHIVE_OK != (ret = read_bits_16(a, rar, p, &bitfield))) {
 		return ret;
 	}
