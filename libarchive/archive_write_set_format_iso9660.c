@@ -1529,7 +1529,7 @@ iso9660_write_header(struct archive_write *a, struct archive_entry *entry)
 	struct isoent *isoent;
 	int r, ret = ARCHIVE_OK;
 
-	char *hardlink = 0;
+	const char *hardlink = 0;
 
 	iso9660 = a->format_data;
 
