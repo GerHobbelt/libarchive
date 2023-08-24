@@ -29,6 +29,13 @@ IF(ENABLE_CAT)
     				 LIBARCHIVE_STATIC)
   ENDIF(ENABLE_CAT_SHARED)
 
+  IF(OS2)
+    set_target_properties(bsdcat PROPERTIES
+      OS2_DEF_VENDOR "$ENV{VENDOR}"
+      OS2_DEF_PATCH "${_trimmed_revision}"
+      OS2_DEF_VERSION "${VERSION}")
+  ENDIF(OS2)
+
   # Installation rules
   INSTALL(TARGETS bsdcat RUNTIME DESTINATION bin)
   INSTALL_MAN(${bsdcat_MANS})

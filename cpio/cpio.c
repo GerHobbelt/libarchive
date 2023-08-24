@@ -176,7 +176,7 @@ main(int argc, char *argv[])
 	cpio->extract_flags |= ARCHIVE_EXTRACT_PERM;
 	cpio->extract_flags |= ARCHIVE_EXTRACT_FFLAGS;
 	cpio->extract_flags |= ARCHIVE_EXTRACT_ACL;
-#if !defined(_WIN32) && !defined(__CYGWIN__)
+#if !defined(_WIN32) && !defined(__CYGWIN__) && !defined(__OS2__)
 	if (geteuid() == 0)
 		cpio->extract_flags |= ARCHIVE_EXTRACT_OWNER;
 #endif

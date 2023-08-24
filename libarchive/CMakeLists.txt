@@ -248,6 +248,12 @@ IF(BUILD_SHARED_LIBS)
   TARGET_INCLUDE_DIRECTORIES(archive PUBLIC .)
   TARGET_LINK_LIBRARIES(archive ${ADDITIONAL_LIBS})
   SET_TARGET_PROPERTIES(archive PROPERTIES SOVERSION ${SOVERSION})
+  IF(OS2)
+    set_target_properties(archive PROPERTIES
+      OS2_DEF_VENDOR "$ENV{VENDOR}"
+      OS2_DEF_PATCH "${_trimmed_revision}"
+      OS2_DEF_VERSION "${VERSION}")
+  ENDIF()
 ENDIF(BUILD_SHARED_LIBS)
 
 # archive_static is a static library

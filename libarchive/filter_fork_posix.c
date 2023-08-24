@@ -72,6 +72,11 @@ __FBSDID("$FreeBSD: head/lib/libarchive/filter_fork.c 182958 2008-09-12 05:33:00
 
 #include "filter_fork.h"
 
+#ifdef __OS2__
+#  include <sys/socket.h>
+#  define pipe(A) socketpair(AF_UNIX, SOCK_STREAM, 0, A)
+#endif
+
 int
 __archive_create_child(const char *cmd, int *child_stdin, int *child_stdout,
 		pid_t *out_child)

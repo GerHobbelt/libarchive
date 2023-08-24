@@ -38,6 +38,13 @@ IF(ENABLE_CPIO)
     				  LIBARCHIVE_STATIC)
   ENDIF(ENABLE_CPIO_SHARED)
 
+  IF(OS2)
+    set_target_properties(bsdcpio PROPERTIES
+      OS2_DEF_VENDOR "$ENV{VENDOR}"
+      OS2_DEF_PATCH "${_trimmed_revision}"
+      OS2_DEF_VERSION "${VERSION}")
+  ENDIF(OS2)
+
   # Installation rules
   INSTALL(TARGETS bsdcpio RUNTIME DESTINATION bin)
   INSTALL_MAN(${bsdcpio_MANS})

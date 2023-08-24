@@ -125,7 +125,7 @@ IF (CMAKE_C_COMPILER_ID MATCHES "^GNU$" OR
   # - try_compile - does not support linker flags
   #
   # The CI fails with this on MacOS
-  IF(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin")
+  IF(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin" AND NOT OS2)
     # Place the functions and data into separate sections, allowing the linker
     # to garbage collect the unused ones.
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections")
@@ -134,7 +134,7 @@ IF (CMAKE_C_COMPILER_ID MATCHES "^GNU$" OR
     # Printing the discarded section is "too much", so enable on demand.
     #SET(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -Wl,--print-gc-sections")
     #SET(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} -Wl,--print-gc-sections")
-  ENDIF(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin")
+  ENDIF(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin" AND NOT OS2)
 ENDIF (CMAKE_C_COMPILER_ID MATCHES "^GNU$" OR
        CMAKE_C_COMPILER_ID MATCHES "^Clang$")
 IF (CMAKE_C_COMPILER_ID MATCHES "^XL$")
@@ -753,6 +753,9 @@ LA_CHECK_INCLUDE_FILE("utime.h" HAVE_UTIME_H)
 LA_CHECK_INCLUDE_FILE("wchar.h" HAVE_WCHAR_H)
 LA_CHECK_INCLUDE_FILE("wctype.h" HAVE_WCTYPE_H)
 LA_CHECK_INCLUDE_FILE("windows.h" HAVE_WINDOWS_H)
+IF(OS2 AND HAVE_PTHREAD_H)
+  LIST(APPEND ADDITIONAL_LIBS "pthread")
+ENDIF(OS2 AND HAVE_PTHREAD_H)
 IF(ENABLE_CNG)
   LA_CHECK_INCLUDE_FILE("bcrypt.h" HAVE_BCRYPT_H)
   IF(HAVE_BCRYPT_H)

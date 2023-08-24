@@ -1666,7 +1666,7 @@ mtree_entry_cmp_key(const struct archive_rb_node *n, const void *key)
 	return (strcmp((const char *)key, e->basename.s));
 }
 
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__OS2__)
 static int
 cleanup_backslash_1(char *p)
 {
@@ -1716,7 +1716,7 @@ mtree_entry_setup_filenames(struct archive_write *a, struct mtree_entry *file,
 	int ret = ARCHIVE_OK;
 
 	archive_strcpy(&file->pathname, archive_entry_pathname(entry));
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__OS2__)
 	/*
 	 * Convert a path-separator from '\' to  '/'
 	 */

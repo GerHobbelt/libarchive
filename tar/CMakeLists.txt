@@ -42,6 +42,13 @@ IF(ENABLE_TAR)
     				 LIBARCHIVE_STATIC)
   ENDIF(ENABLE_TAR_SHARED)
 
+  IF(OS2)
+    set_target_properties(bsdtar PROPERTIES
+      OS2_DEF_VENDOR "$ENV{VENDOR}"
+      OS2_DEF_PATCH "${_trimmed_revision}"
+      OS2_DEF_VERSION "${VERSION}")
+  ENDIF(OS2)
+
   # Installation rules
   INSTALL(TARGETS bsdtar RUNTIME DESTINATION bin)
   INSTALL_MAN(${bsdtar_MANS})

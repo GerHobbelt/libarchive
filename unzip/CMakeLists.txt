@@ -31,6 +31,13 @@ IF(ENABLE_UNZIP)
                                  LIBARCHIVE_STATIC)
   ENDIF(ENABLE_UNZIP_SHARED)
 
+  IF(OS2)
+    set_target_properties(bsdunzip PROPERTIES
+      OS2_DEF_VENDOR "$ENV{VENDOR}"
+      OS2_DEF_PATCH "${_trimmed_revision}"
+      OS2_DEF_VERSION "${VERSION}")
+  ENDIF(OS2)
+
   # Installation rules
   INSTALL(TARGETS bsdunzip RUNTIME DESTINATION bin)
   INSTALL_MAN(${bsdunzip_MANS})

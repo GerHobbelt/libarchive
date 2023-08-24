@@ -237,7 +237,7 @@ verify_tree(size_t limit)
 		}
 	}
 
-#if !defined(_WIN32) || defined(__CYGWIN__)
+#if !defined(__OS2__) && !defined(_WIN32) || defined(__CYGWIN__)
 	{
 		const char *dp;
 		/* Now make sure nothing is there that shouldn't be. */

@@ -2966,7 +2966,7 @@ set_directory_record_rr(unsigned char *bp, int dr_len,
 				 */
 				/* set all read bit ON */
 				mode |= 0444;
-#if !defined(_WIN32) && !defined(__CYGWIN__)
+#if !defined(_WIN32) && !defined(__CYGWIN__) && !defined(__OS2__)
 				if (mode & 0111)
 #endif
 					/* set all exec bit ON */
@@ -4664,7 +4664,7 @@ isofile_free(struct isofile *file)
 	free(file);
 }
 
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__OS2__)
 static int
 cleanup_backslash_1(char *p)
 {
@@ -4769,7 +4769,7 @@ isofile_gen_utility_names(struct archive_write *a, struct isofile *file)
 		 * Remove trailing '/'.
 		 */
 		while (u16len >= 2) {
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__OS2__)
 			if (u16[u16len-2] == 0 &&
 			    (u16[u16len-1] == '/' || u16[u16len-1] == '\\'))
 #else
@@ -4788,7 +4788,7 @@ isofile_gen_utility_names(struct archive_write *a, struct isofile *file)
 		u16len >>= 1;
 		ulen_last = u16len;
 		while (u16len > 0) {
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__OS2__)
 			if (u16[0] == 0 && (u16[1] == '/' || u16[1] == '\\'))
 #else
 			if (u16[0] == 0 && u16[1] == '/')
@@ -4816,7 +4816,7 @@ isofile_gen_utility_names(struct archive_write *a, struct isofile *file)
 	}
 
 	archive_strcpy(&(file->parentdir), pathname);
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__OS2__)
 	/*
 	 * Convert a path-separator from '\' to  '/'
 	 */
@@ -4929,7 +4929,7 @@ isofile_gen_utility_names(struct archive_write *a, struct isofile *file)
 		/* Convert symlink name too. */
 		pathname = archive_entry_symlink(file->entry);
 		archive_strcpy(&(file->symlink),  pathname);
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__OS2__)
 		/*
 		 * Convert a path-separator from '\' to  '/'
 		 */
