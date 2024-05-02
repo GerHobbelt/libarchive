@@ -1954,15 +1954,16 @@ url_encode(const char *in)
  * is responsible for freeing the result.
  */
 static char *
-base64_encode(const char *s, size_t len)
+base64_encode(const char *sin, size_t len)
 {
+	const uint8_t *s = (const uint8_t *)sin;
 	static const char digits[64] =
 	    { 'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O',
 	      'P','Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d',
 	      'e','f','g','h','i','j','k','l','m','n','o','p','q','r','s',
 	      't','u','v','w','x','y','z','0','1','2','3','4','5','6','7',
 	      '8','9','+','/' };
-	int v;
+	uint32_t v;
 	char *d, *out;
 
 	/* 3 bytes becomes 4 chars, but round up and allow for trailing NUL */
@@ -1973,9 +1974,9 @@ base64_encode(const char *s, size_t len)
 
 	/* Convert each group of 3 bytes into 4 characters. */
 	while (len >= 3) {
-		v = (((int)s[0] << 16) & 0xff0000)
-		    | (((int)s[1] << 8) & 0xff00)
-		    | (((int)s[2]) & 0x00ff);
+		v = (((uint32_t)s[0] << 16) & 0xff0000)
+		    | (((uint32_t)s[1] << 8) & 0xff00)
+		    | (((uint32_t)s[2]) & 0x00ff);
 		s += 3;
 		len -= 3;
 		*d++ = digits[(v >> 18) & 0x3f];
@@ -1987,13 +1988,13 @@ base64_encode(const char *s, size_t len)
 	switch (len) {
 	case 0: break;
 	case 1:
-		v = (((int)s[0] << 16) & 0xff0000);
+		v = (((uint32_t)s[0] << 16) & 0xff0000);
 		*d++ = digits[(v >> 18) & 0x3f];
 		*d++ = digits[(v >> 12) & 0x3f];
 		break;
 	case 2:
-		v = (((int)s[0] << 16) & 0xff0000)
-		    | (((int)s[1] << 8) & 0xff00);
+		v = (((uint32_t)s[0] << 16) & 0xff0000)
+		    | (((uint32_t)s[1] << 8) & 0xff00);
 		*d++ = digits[(v >> 18) & 0x3f];
 		*d++ = digits[(v >> 12) & 0x3f];
 		*d++ = digits[(v >> 6) & 0x3f];
