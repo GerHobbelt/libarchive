@@ -1775,13 +1775,11 @@ is_symlink(const char *file, int line,
 		failure_finish(NULL);
 		return (0);
 	}
-	while(*p != '\0') {
-		if(*p == '/')
+	for (p = pathname, s = pn; *p != '\0'; p++, s++) {
+		if (*p == '/')
 			*s = '\\';
 		else
 			*s = *p;
-		p++;
-		s++;
 	}
 	*s = '\0';
 
