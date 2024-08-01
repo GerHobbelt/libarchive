@@ -3895,6 +3895,7 @@ int main(int argc, const char** argv)
 	int test_set[limit];
 	int i = 0, j = 0, tests_run = 0, tests_failed = 0, option;
 	size_t testprogdir_len;
+	size_t tmplen;
 #ifdef PROGRAM
 	size_t tmp2_len;
 #endif
@@ -3994,6 +3995,9 @@ int main(int argc, const char** argv)
 		tmp = getenv("TEMPDIR");
 	else
 		tmp = "/tmp";
+	tmplen = strlen(tmp);
+	while (tmplen > 0 && tmp[tmplen - 1] == '/')
+		tmplen--;
 
 	/* Allow -d to be controlled through the environment. */
 	if (getenv(ENVBASE "_DEBUG") != NULL)
@@ -4146,15 +4150,15 @@ int main(int argc, const char** argv)
 #endif
 		strftime(tmpdir_timestamp, sizeof(tmpdir_timestamp),
 		    "%Y-%m-%dT%H.%M.%S", tmptr);
-		if ((strlen(tmp) + 1 + strlen(progname) + 1 +
-		    strlen(tmpdir_timestamp) + 1 + 3) >
+		if (tmplen + 1 + strlen(progname) + 1 +
+		    strlen(tmpdir_timestamp) + 1 + 3 >
 		    sizeof(tmpdir)) {
 			fprintf(stderr,
 			    "ERROR: Temp directory pathname too long\n");
 			exit(1);
 		}
-		snprintf(tmpdir, sizeof(tmpdir), "%s/%s.%s-%03d", tmp,
-		    progname, tmpdir_timestamp, i);
+		snprintf(tmpdir, sizeof(tmpdir), "%.*s/%s.%s-%03d",
+		    (int)tmplen, tmp, progname, tmpdir_timestamp, i);
 		if (assertMakeDir(tmpdir,0755))
 			break;
 		if (i >= 999) {
