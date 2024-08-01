@@ -1240,7 +1240,7 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 	}
 	expected_count = i;
 	if (expected_count) {
-		expected = malloc(sizeof(char *) * expected_count);
+		expected = calloc(expected_count, sizeof(*expected));
 		if (expected == NULL) {
 			failure_start(pathname, line, "Can't allocate memory");
 			failure_finish(NULL);
@@ -1250,6 +1250,15 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 		}
 		for (i = 0; lines[i] != NULL; ++i) {
 			expected[i] = strdup(lines[i]);
+			if (expected[i] == NULL) {
+				failure_start(pathname, line, "Can't allocate memory");
+				failure_finish(NULL);
+				while (i > 0)
+					free(expected[--i]);
+				free(expected);
+				free(buff);
+				return (0);
+			}
 		}
 	}
 
@@ -1267,6 +1276,8 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 		if (actual == NULL) {
 			failure_start(pathname, line, "Can't allocate memory");
 			failure_finish(NULL);
+			for (i = 0; i < expected_count; ++i)
+				free(expected[i]);
 			free(expected);
 			free(buff);
 			return (0);
@@ -1282,8 +1293,6 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 
 	/* Erase matching lines from both lists */
 	for (i = 0; i < expected_count; ++i) {
-		if (expected[i] == NULL)
-			continue;
 		for (j = 0; j < actual_count; ++j) {
 			if (actual[j] == NULL)
 				continue;
