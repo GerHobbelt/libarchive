@@ -2089,8 +2089,8 @@ assertion_umask(const char *file, int line, int mask)
 
 /* Set times, report failures. */
 int
-assertion_utimes(const char *file, int line,
-    const char *pathname, long at, long at_nsec, long mt, long mt_nsec)
+assertion_utimes(const char *file, int line, const char *pathname,
+    time_t at, suseconds_t at_nsec, time_t mt, suseconds_t mt_nsec)
 {
 	int r;
 
@@ -3885,7 +3885,7 @@ get_test_set(int *test_set, int limit, const char *test)
 int main(int argc, const char** argv)
 {
 	static const int limit = sizeof(tests) / sizeof(tests[0]);
-	int test_set[sizeof(tests) / sizeof(tests[0])];
+	int test_set[limit];
 	int i = 0, j = 0, tests_run = 0, tests_failed = 0, option;
 	size_t testprogdir_len;
 #ifdef PROGRAM
@@ -4141,7 +4141,7 @@ int main(int argc, const char** argv)
 		    "%Y-%m-%dT%H.%M.%S", tmptr);
 		if ((strlen(tmp) + 1 + strlen(progname) + 1 +
 		    strlen(tmpdir_timestamp) + 1 + 3) >
-		    (sizeof(tmpdir) / sizeof(char))) {
+		    sizeof(tmpdir)) {
 			fprintf(stderr,
 			    "ERROR: Temp directory pathname too long\n");
 			exit(1);
