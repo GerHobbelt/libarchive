@@ -80,6 +80,10 @@
 #include "archive_crc32.h"
 #endif
 
+#ifdef HAVE_LIBNATSPEC
+#include <natspec.h>
+#endif
+
 struct zip_entry {
 	struct archive_rb_node	node;
 	struct zip_entry	*next;
@@ -1015,8 +1019,30 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 	else
 		sconv = zip->sconv_default;
 
-	if (archive_entry_copy_pathname_l(entry,
-	    h, filename_length, sconv) != 0) {
+	int str_copy_error = EAGAIN;
+#ifdef HAVE_LIBNATSPEC
+	if ((zip_entry->flags & LA_FROM_CENTRAL_DIRECTORY) && !(zip_entry->zip_flags & ZIP_UTF8_NAME)) {
+		const char *enable_natspec_env = getenv("LIBARCHIVE_ENABLE_LIBNATSPEC");
+		if (enable_natspec_env && strcmp(enable_natspec_env, "1") == 0 && filename_length < PATH_MAX) {
+			const char *fileenc = natspec_get_filename_encoding("");
+			const char *archive_oem_charset = natspec_get_charset_by_locale(NATSPEC_DOSCS, "");
+			char path[PATH_MAX];
+			memcpy(path, h, filename_length);
+			path[filename_length] = '\0';
+			char *converted_path = natspec_convert(path, fileenc, archive_oem_charset, 0);
+			if (converted_path) {
+				size_t converted_path_length = strlen(converted_path);
+				str_copy_error = archive_entry_copy_pathname_l(entry, converted_path, converted_path_length, sconv);
+				free(converted_path);
+			}
+		}
+	}
+#endif
+	if (str_copy_error == EAGAIN) {
+		str_copy_error = archive_entry_copy_pathname_l(entry, h, filename_length, sconv);
+	}
+
+	if (str_copy_error != 0) {
 		if (errno == ENOMEM) {
 			archive_set_error(&a->archive, ENOMEM,
 			    "Can't allocate memory for Pathname");

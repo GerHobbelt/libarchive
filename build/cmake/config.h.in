@@ -1406,3 +1406,6 @@ typedef uint64_t uintmax_t;
 
 /* Define to `unsigned int' if <sys/types.h> does not define. */
 #cmakedefine uintptr_t @uintptr_t@
+
+/* Define to 1 if you have the `natspec' library (-lnatspec). */
+#cmakedefine HAVE_LIBNATSPEC 1

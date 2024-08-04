@@ -247,6 +247,9 @@ OPTION(ENABLE_ICONV "Enable iconv support" ON)
 OPTION(ENABLE_TEST "Enable unit and regression tests" ON)
 OPTION(ENABLE_COVERAGE "Enable code coverage (GCC only, automatically sets ENABLE_TEST to ON)" FALSE)
 OPTION(ENABLE_INSTALL "Enable installing of libraries" ON)
+if (UNIX)
+	option(ENABLE_LIBNATSPEC "Enable use of libnatspec" ON)
+endif()
 
 SET(POSIX_REGEX_LIB "AUTO" CACHE STRING "Choose what library should provide POSIX regular expression support")
 SET(ENABLE_SAFESEH "AUTO" CACHE STRING "Enable use of /SAFESEH linker flag (MSVC only)")
@@ -2106,6 +2109,17 @@ ELSE(ENABLE_ACL)
   SET(ARCHIVE_ACL_SUNOS FALSE)
   SET(ARCHIVE_ACL_SUNOS_NFS4 FALSE)
 ENDIF(ENABLE_ACL)
+
+# LIBNATSPEC
+if (ENABLE_LIBNATSPEC)
+	find_library(LIBNATSPEC NAMES natspec)
+	if (LIBNATSPEC)
+		set(HAVE_LIBNATSPEC 1)
+		LIST(APPEND ADDITIONAL_LIBS ${LIBNATSPEC})
+	else()
+		message(WARNING "-- libnatspec not found; libnatspec support disabled")
+	endif()
+endif()
 
 #
 # Check MD5/RMD160/SHA support
