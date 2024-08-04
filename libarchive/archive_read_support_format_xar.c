@@ -419,7 +419,7 @@ static void	unknowntag_end(struct xar *, const char *);
 static int	xml_start(struct archive_read *,
     const char *, struct xmlattr_list *);
 static void	xml_end(void *, const char *);
-static void	xml_data(void *, const char *, int);
+static void	xml_data(void *, const char *, size_t);
 static int	xml_parse_file_flags(struct xar *, const char *);
 static int	xml_parse_file_ext2(struct xar *, const char *);
 #if defined(HAVE_LIBXML_XMLREADER_H)
@@ -1622,9 +1622,9 @@ decompress(struct archive_read *a, const void **buff, size_t *outbytes,
 	switch (xar->rd_encoding) {
 	case GZIP:
 		xar->stream.next_in = (Bytef *)(uintptr_t)b;
-		xar->stream.avail_in = avail_in;
+		xar->stream.avail_in = (uInt)avail_in;
 		xar->stream.next_out = (unsigned char *)outbuff;
-		xar->stream.avail_out = avail_out;
+		xar->stream.avail_out = (uInt)avail_out;
 		r = zng_inflate(&(xar->stream), Z_NO_FLUSH);
 		switch (r) {
 		case Z_OK: /* Decompressor made some progress.*/
@@ -1641,9 +1641,9 @@ decompress(struct archive_read *a, const void **buff, size_t *outbytes,
 #if defined(HAVE_BZLIB_H) && defined(BZ_CONFIG_ERROR)
 	case BZIP2:
 		xar->bzstream.next_in = (char *)(uintptr_t)b;
-		xar->bzstream.avail_in = avail_in;
+		xar->bzstream.avail_in = (unsigned int)avail_in;
 		xar->bzstream.next_out = (char *)outbuff;
-		xar->bzstream.avail_out = avail_out;
+		xar->bzstream.avail_out = (unsigned int)avail_out;
 		r = BZ2_bzDecompress(&(xar->bzstream));
 		switch (r) {
 		case BZ_STREAM_END: /* Found end of stream. */
@@ -2680,7 +2680,7 @@ is_string(const char *known, const char *data, size_t len)
 }
 
 static void
-xml_data(void *userData, const char *s, int len)
+xml_data(void *userData, const char *s, size_t len)
 {
 	struct archive_read *a;
 	struct xar *xar;
@@ -3286,7 +3286,7 @@ expat_data_cb(void *userData, const XML_Char *s, int len)
 {
 	struct expat_userData *ud = (struct expat_userData *)userData;
 
-	xml_data(ud->archive, s, len);
+	xml_data(ud->archive, s, (size_t)len);
 }
 
 static int
@@ -3329,7 +3329,7 @@ expat_read_toc(struct archive_read *a)
 		xar->toc_total += outbytes;
 		PRINT_TOC(d, outbytes);
 
-		xr = XML_Parse(parser, d, outbytes, xar->toc_remaining == 0);
+		xr = XML_Parse(parser, d, (int)outbytes, xar->toc_remaining == 0);
 		__archive_read_consume(a, used);
 		if (xr == XML_STATUS_ERROR) {
 			XML_ParserFree(parser);

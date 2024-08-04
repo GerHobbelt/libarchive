@@ -1927,7 +1927,7 @@ zip_read_data_zipx_xz(struct archive_read *a, const void **buff,
 		return (ARCHIVE_FATAL);
 	}
 
-	in_bytes = zipmin(zip->entry_bytes_remaining, bytes_avail);
+	in_bytes = (ssize_t)zipmin(zip->entry_bytes_remaining, bytes_avail);
 	zip->zipx_lzma_stream.next_in = compressed_buf;
 	zip->zipx_lzma_stream.avail_in = in_bytes;
 	zip->zipx_lzma_stream.total_in = 0;
@@ -1969,14 +1969,14 @@ zip_read_data_zipx_xz(struct archive_read *a, const void **buff,
 			break;
 	}
 
-	to_consume = zip->zipx_lzma_stream.total_in;
+	to_consume = (ssize_t)zip->zipx_lzma_stream.total_in;
 
 	__archive_read_consume(a, to_consume);
 	zip->entry_bytes_remaining -= to_consume;
 	zip->entry_compressed_bytes_read += to_consume;
 	zip->entry_uncompressed_bytes_read += zip->zipx_lzma_stream.total_out;
 
-	*size = zip->zipx_lzma_stream.total_out;
+	*size = (size_t)zip->zipx_lzma_stream.total_out;
 	*buff = zip->uncompressed_buffer;
 
 	return (ARCHIVE_OK);
@@ -2017,7 +2017,7 @@ zip_read_data_zipx_lzma_alone(struct archive_read *a, const void **buff,
 	}
 
 	/* Set decompressor parameters. */
-	in_bytes = zipmin(zip->entry_bytes_remaining, bytes_avail);
+	in_bytes = (ssize_t)zipmin(zip->entry_bytes_remaining, bytes_avail);
 
 	zip->zipx_lzma_stream.next_in = compressed_buf;
 	zip->zipx_lzma_stream.avail_in = in_bytes;
@@ -2027,7 +2027,7 @@ zip_read_data_zipx_lzma_alone(struct archive_read *a, const void **buff,
 		/* These lzma_alone streams lack end of stream marker, so let's
 		 * make sure the unpacker won't try to unpack more than it's
 		 * supposed to. */
-		zipmin((int64_t) zip->uncompressed_buffer_size,
+		(size_t)zipmin((int64_t) zip->uncompressed_buffer_size,
 		    zip->entry->uncompressed_size -
 		    zip->entry_uncompressed_bytes_read);
 	zip->zipx_lzma_stream.total_out = 0;
@@ -2064,7 +2064,7 @@ zip_read_data_zipx_lzma_alone(struct archive_read *a, const void **buff,
 			return (ARCHIVE_FATAL);
 	}
 
-	to_consume = zip->zipx_lzma_stream.total_in;
+	to_consume = (ssize_t)zip->zipx_lzma_stream.total_in;
 
 	/* Update pointers. */
 	__archive_read_consume(a, to_consume);
@@ -2085,7 +2085,7 @@ zip_read_data_zipx_lzma_alone(struct archive_read *a, const void **buff,
 	}
 
 	/* Return values. */
-	*size = zip->zipx_lzma_stream.total_out;
+	*size = (size_t)zip->zipx_lzma_stream.total_out;
 	*buff = zip->uncompressed_buffer;
 
 	/* If we're here, then we're good! */
@@ -2335,7 +2335,7 @@ zip_read_data_zipx_bzip2(struct archive_read *a, const void **buff,
 		return (ARCHIVE_FATAL);
 	}
 
-	in_bytes = zipmin(zip->entry_bytes_remaining, bytes_avail);
+	in_bytes = (ssize_t)zipmin(zip->entry_bytes_remaining, bytes_avail);
 	if(in_bytes < 1) {
 		/* libbz2 doesn't complain when caller feeds avail_in == 0.
 		 * It will actually return success in this case, which is
@@ -2400,7 +2400,7 @@ zip_read_data_zipx_bzip2(struct archive_read *a, const void **buff,
 	zip->entry_uncompressed_bytes_read += total_out;
 
 	/* Give libarchive its due. */
-	*size = total_out;
+	*size = (size_t)total_out;
 	*buff = zip->uncompressed_buffer;
 
 	return ARCHIVE_OK;
@@ -2484,7 +2484,7 @@ zip_read_data_zipx_zstd(struct archive_read *a, const void **buff,
 		return (ARCHIVE_FATAL);
 	}
 
-	in_bytes = zipmin(zip->entry_bytes_remaining, bytes_avail);
+	in_bytes = (ssize_t)zipmin(zip->entry_bytes_remaining, bytes_avail);
 	if(in_bytes < 1) {
 		/* zstd doesn't complain when caller feeds avail_in == 0.
 		 * It will actually return success in this case, which is
@@ -2530,7 +2530,7 @@ zip_read_data_zipx_zstd(struct archive_read *a, const void **buff,
 	zip->entry_uncompressed_bytes_read += total_out;
 
 	/* Give libarchive its due. */
-	*size = total_out;
+	*size = (size_t)total_out;
 	*buff = zip->uncompressed_buffer;
 
 	return ARCHIVE_OK;

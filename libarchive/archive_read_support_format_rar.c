@@ -1376,6 +1376,8 @@ read_header(struct archive_read *a, struct archive_entry *entry,
   struct archive_string_conv *sconv, *fn_sconv;
   unsigned long crc32_val;
   int ret = (ARCHIVE_OK), ret2;
+  char *newptr;
+  size_t newsize;
 
   rar = (struct rar *)(a->format->data);
 
@@ -1522,8 +1524,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
     return (ARCHIVE_FATAL);
   }
   if (rar->filename_allocated < filename_size * 2 + 2) {
-    char *newptr;
-    size_t newsize = filename_size * 2 + 2;
+    newsize = filename_size * 2 + 2;
     newptr = realloc(rar->filename, newsize);
     if (newptr == NULL) {
       archive_set_error(&a->archive, ENOMEM,
@@ -1547,7 +1548,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
       fn_end = filename_size * 2;
       filename_size = 0;
       offset = (unsigned)strlen(filename) + 1;
-      highbyte = *(p + offset++);
+      highbyte = offset >= end ? 0 : *(p + offset++);
       flagbits = 0;
       flagbyte = 0;
       while (offset < end && filename_size < fn_end)
@@ -1562,14 +1563,22 @@ read_header(struct archive_read *a, struct archive_entry *entry,
         switch((flagbyte >> flagbits) & 3)
         {
           case 0:
+            if (offset >= end)
+              continue;
             filename[filename_size++] = '\0';
             filename[filename_size++] = *(p + offset++);
             break;
           case 1:
+            if (offset >= end)
+              continue;
             filename[filename_size++] = highbyte;
             filename[filename_size++] = *(p + offset++);
             break;
           case 2:
+            if (offset >= end - 1) {
+              offset = end;
+              continue;
+            }
             filename[filename_size++] = *(p + offset + 1);
             filename[filename_size++] = *(p + offset);
             offset += 2;
@@ -1577,9 +1586,15 @@ read_header(struct archive_read *a, struct archive_entry *entry,
           case 3:
           {
             char extra, high;
-            uint8_t length = *(p + offset++);
+            uint8_t length;
 
+            if (offset >= end)
+              continue;
+
+            length = *(p + offset++);
             if (length & 0x80) {
+              if (offset >= end)
+                continue;
               extra = *(p + offset++);
               high = (char)highbyte;
             } else
@@ -1660,13 +1675,16 @@ read_header(struct archive_read *a, struct archive_entry *entry,
     rar->cursor++;
     if (rar->cursor >= rar->nodes)
     {
-      rar->nodes++;
-      if ((rar->dbo =
-        realloc(rar->dbo, sizeof(*rar->dbo) * rar->nodes)) == NULL)
+      struct data_block_offsets *newdbo;
+
+      newsize = sizeof(*rar->dbo) * (rar->nodes + 1);
+      if ((newdbo = realloc(rar->dbo, newsize)) == NULL)
       {
         archive_set_error(&a->archive, ENOMEM, "Couldn't allocate memory.");
         return (ARCHIVE_FATAL);
       }
+      rar->dbo = newdbo;
+      rar->nodes++;
       rar->dbo[rar->cursor].header_size = header_size;
       rar->dbo[rar->cursor].start_offset = -1;
       rar->dbo[rar->cursor].end_offset = -1;
@@ -1686,9 +1704,14 @@ read_header(struct archive_read *a, struct archive_entry *entry,
     return (ARCHIVE_FATAL);
   }
 
-  rar->filename_save = (char*)realloc(rar->filename_save,
-                                      filename_size + 1);
-  memcpy(rar->filename_save, rar->filename, filename_size + 1);
+  newsize = filename_size + 1;
+  if ((newptr = realloc(rar->filename_save, newsize)) == NULL)
+  {
+    archive_set_error(&a->archive, ENOMEM, "Couldn't allocate memory.");
+    return (ARCHIVE_FATAL);
+  }
+  rar->filename_save = newptr;
+  memcpy(rar->filename_save, rar->filename, newsize);
   rar->filename_save_size = filename_size;
 
   /* Set info for seeking */
@@ -3145,7 +3168,7 @@ copy_from_lzss_window_to_unp(struct archive_read *a, const void **buffer,
   } else {
       goto fatal;
   }
-  rar->unp_offset += length;
+  rar->unp_offset += (unsigned int) length;
   if (rar->unp_offset >= rar->unp_buffer_size)
     *buffer = rar->unp_buffer;
   else
@@ -3684,7 +3707,7 @@ execute_filter_rgb(struct rar_filter *filter, struct rar_virtual_machine *vm)
   uint8_t *src, *dst;
   uint32_t i, j;
 
-  if (blocklength > PROGRAM_WORK_SIZE / 2 || stride > blocklength)
+  if (blocklength > PROGRAM_WORK_SIZE / 2 || stride > blocklength || blocklength < 3 || byteoffset > 2)
     return 0;
 
   src = &vm->memory[0];
@@ -3694,6 +3717,13 @@ execute_filter_rgb(struct rar_filter *filter, struct rar_virtual_machine *vm)
     uint8_t *prev = dst + i - stride;
     for (j = i; j < blocklength; j += 3)
     {
+      /*
+       * The src block should not overlap with the dst block.
+       * If so it would be better to consider this archive is broken.
+       */
+      if (src >= dst)
+        return 0;
+
       if (prev >= dst)
       {
         uint32_t delta1 = abs(prev[3] - prev[0]);
