@@ -136,7 +136,7 @@ int main(int argc, const char** argv)
 	int v, skip_data, raw;
 	int r = ARCHIVE_OK;
 	int format_printed;
-	mode_t mode;
+	unsigned short int mode;
 
 	filename = NULL;
 	skip_data = 0;
