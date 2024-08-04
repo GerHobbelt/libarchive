@@ -6,6 +6,9 @@ endif()
 if(POLICY CMP0074)
   cmake_policy(SET CMP0074 NEW) #3.12.0 `find_package()`` uses ``<PackageName>_ROOT`` variables.
 endif()
+if(POLICY CMP0075)
+  cmake_policy(SET CMP0075 NEW) #3.12.0 `check_include_file()`` and friends use ``CMAKE_REQUIRED_LIBRARIES``.
+endif()
 #
 PROJECT(libarchive C)
 #
@@ -22,7 +25,7 @@ endif()
 #   MinSizeRel     : Release Min Size build
 #   None           : No build type
 IF(NOT CMAKE_BUILD_TYPE)
-  SET(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build Type" FORCE)
+  SET(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build Type" FORCE)
 ENDIF(NOT CMAKE_BUILD_TYPE)
 # Set a value type to properly display CMAKE_BUILD_TYPE on GUI if the
 # value type is "UNINITIALIZED".
@@ -657,7 +660,7 @@ IF(ZSTD_FOUND)
   SET(CMAKE_REQUIRED_LIBRARIES ${ZSTD_LIBRARY})
   SET(CMAKE_REQUIRED_INCLUDES ${ZSTD_INCLUDE_DIR})
   CHECK_FUNCTION_EXISTS(ZSTD_decompressStream HAVE_LIBZSTD)
-  CHECK_FUNCTION_EXISTS(ZSTD_compressStream HAVE_LIBZSTD_COMPRESSOR)
+  CHECK_FUNCTION_EXISTS(ZSTD_compressStream HAVE_ZSTD_compressStream)
   #
   # TODO: test for static library.
   #
@@ -1191,7 +1194,7 @@ ENDIF(ENABLE_ICONV)
 #
 # Find Libxml2
 #
-IF(ENABLE_LIBXML2)
+IF(ENABLE_LIBXML2 AND HAVE_ICONV)
   FIND_PACKAGE(LibXml2)
 ELSE()
   SET(LIBXML2_FOUND FALSE)
