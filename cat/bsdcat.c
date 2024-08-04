@@ -36,6 +36,9 @@
 #include <string.h>
 #endif
 
+#include <archive.h>
+#include <archive_entry.h>
+
 #include "bsdcat.h"
 #include "err.h"
 
@@ -51,13 +54,13 @@ static const char *bsdcat_current_path;
 static int exit_status = 0;
 
 
-static void usage(FILE *stream, int eval);
+static __LA_NORETURN void usage(FILE *stream, int eval);
 static void bsdcat_next(void);
 static void bsdcat_print_error(void);
 static void bsdcat_read_to_stdout(const char* filename);
 
 
-static void
+static __LA_NORETURN void
 usage(FILE *stream, int eval)
 {
 	const char *p;
@@ -67,13 +70,21 @@ usage(FILE *stream, int eval)
 	exit(eval);
 }
 
-static void
+static __LA_NORETURN void
 version(void)
 {
 	printf("bsdcat %s - %s \n",
 	    BSDCAT_VERSION_STRING,
 	    archive_version_details());
 	exit(0);
+}
+
+static void
+bsdcat_print_error(void)
+{
+	lafe_warnc(0, "%s: %s",
+	    bsdcat_current_path, archive_error_string(a));
+	exit_status = 1;
 }
 
 static void
@@ -89,14 +100,6 @@ bsdcat_next(void)
 	archive_read_support_filter_all(a);
 	archive_read_support_format_empty(a);
 	archive_read_support_format_raw(a);
-}
-
-static void
-bsdcat_print_error(void)
-{
-	lafe_warnc(0, "%s: %s",
-	    bsdcat_current_path, archive_error_string(a));
-	exit_status = 1;
 }
 
 static void
