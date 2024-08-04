@@ -435,7 +435,7 @@ static int make_table_recurse(struct archive_read *, struct huffman_code *, int,
                               struct huffman_table_entry *, int, int);
 static int expand(struct archive_read *, int64_t *);
 static int copy_from_lzss_window_to_unp(struct archive_read *, const void **,
-                                        int64_t, int);
+                                        int64_t, size_t);
 static const void *rar_read_ahead(struct archive_read *, size_t, ssize_t *);
 static int parse_filter(struct archive_read *, const uint8_t *, uint16_t,
                         uint8_t);
@@ -1472,6 +1472,11 @@ read_header(struct archive_read *a, struct archive_entry *entry,
 
   if (rar->file_flags & FHD_LARGE)
   {
+    if (p + 8 > endp) {
+      archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
+                        "Invalid header size");
+      return (ARCHIVE_FATAL);
+    }
     memcpy(packed_size, file_header.pack_size, 4);
     memcpy(packed_size + 4, p, 4); /* High pack size */
     p += 4;
@@ -2063,7 +2068,7 @@ read_data_compressed(struct archive_read *a, const void **buff, size_t *size,
         bs = rar->unp_buffer_size - rar->unp_offset;
       else
         bs = (size_t)rar->bytes_uncopied;
-      ret = copy_from_lzss_window_to_unp(a, buff, rar->offset, (int)bs);
+      ret = copy_from_lzss_window_to_unp(a, buff, rar->offset, bs);
       if (ret != ARCHIVE_OK)
         return (ret);
       rar->offset += bs;
@@ -2216,7 +2221,7 @@ read_data_compressed(struct archive_read *a, const void **buff, size_t *size,
       bs = rar->unp_buffer_size - rar->unp_offset;
     else
       bs = (size_t)rar->bytes_uncopied;
-    ret = copy_from_lzss_window_to_unp(a, buff, rar->offset, (int)bs);
+    ret = copy_from_lzss_window_to_unp(a, buff, rar->offset, bs);
     if (ret != ARCHIVE_OK)
       return (ret);
     rar->offset += bs;
@@ -3097,10 +3102,15 @@ copy_from_lzss_window(struct archive_read *a, void *buffer,
 
 static int
 copy_from_lzss_window_to_unp(struct archive_read *a, const void **buffer,
-                             int64_t startpos, int length)
+                             int64_t startpos, size_t length)
 {
   int windowoffs, firstpart;
   struct rar *rar = (struct rar *)(a->format->data);
+
+  if (length > rar->unp_buffer_size)
+  {
+    goto fatal;
+  }
 
   if (!rar->unp_buffer)
   {
@@ -3113,17 +3123,17 @@ copy_from_lzss_window_to_unp(struct archive_read *a, const void **buffer,
   }
 
   windowoffs = lzss_offset_for_position(&rar->lzss, startpos);
-  if(windowoffs + length <= lzss_size(&rar->lzss)) {
+  if(windowoffs + length <= (size_t)lzss_size(&rar->lzss)) {
     memcpy(&rar->unp_buffer[rar->unp_offset], &rar->lzss.window[windowoffs],
            length);
-  } else if (length <= lzss_size(&rar->lzss)) {
+  } else if (length <= (size_t)lzss_size(&rar->lzss)) {
     firstpart = lzss_size(&rar->lzss) - windowoffs;
     if (firstpart < 0) {
       archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
                         "Bad RAR file data");
       return (ARCHIVE_FATAL);
     }
-    if (firstpart < length) {
+    if ((size_t)firstpart < length) {
       memcpy(&rar->unp_buffer[rar->unp_offset],
              &rar->lzss.window[windowoffs], firstpart);
       memcpy(&rar->unp_buffer[rar->unp_offset + firstpart],
@@ -3133,9 +3143,7 @@ copy_from_lzss_window_to_unp(struct archive_read *a, const void **buffer,
              &rar->lzss.window[windowoffs], length);
     }
   } else {
-      archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
-                        "Bad RAR file data");
-      return (ARCHIVE_FATAL);
+      goto fatal;
   }
   rar->unp_offset += length;
   if (rar->unp_offset >= rar->unp_buffer_size)
@@ -3143,6 +3151,11 @@ copy_from_lzss_window_to_unp(struct archive_read *a, const void **buffer,
   else
     *buffer = NULL;
   return (ARCHIVE_OK);
+
+fatal:
+  archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
+                    "Bad RAR file data");
+  return (ARCHIVE_FATAL);
 }
 
 static const void *
