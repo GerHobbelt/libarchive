@@ -23,8 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "./test.h"
-__FBSDID("$FreeBSD$");
+#include "test.h"
 
 #define should(__a, __code, __opts) \
 assertEqualInt(__code, archive_read_set_options(__a, __opts))

@@ -22,8 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
-__FBSDID("$FreeBSD$");
+#include "test.h"
 
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
@@ -106,7 +105,7 @@ is_sparse_supported(const char *path)
 		root[3] = '\0';
 	else
 		return (0);
-	assertEqualInt((r = GetVolumeInformationA(root, vol,
+	assertEqualInt((r = GetVolumeInformation(root, vol,
 	    sizeof(vol), NULL, NULL, &flags, sys, sizeof(sys))), 1);
 	return (r != 0 && (flags & FILE_SUPPORTS_SPARSE_FILES) != 0);
 }

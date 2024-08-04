@@ -22,8 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
-__FBSDID("$FreeBSD$");
+#include "test.h"
 
 #if defined(_WIN32) && !defined(__CYGWIN__) && !defined(__BORLANDC__)
 #define chmod _chmod

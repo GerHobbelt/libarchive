@@ -27,8 +27,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD$
- *
  * This file would be much shorter if we didn't care about command-line
  * compatibility with Info-ZIP's UnZip, which requires us to duplicate
  * parts of libarchive in order to gain more detailed control of its
@@ -77,6 +75,9 @@
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
+#endif
+#ifdef HAVE_GETOPT_OPTRESET
+#include <getopt.h>
 #endif
 
 #include "bsdunzip.h"
@@ -1229,10 +1230,8 @@ main(int argc, char *argv[])
 	 */
 	nopts = getopts(argc, argv);
 
-	if (version_opt == 1) {
+	if (version_opt == 1)
 		version();
-		exit(EXIT_SUCCESS);
-	}
 
 	/*
 	 * When more of the zipinfo mode options are implemented, this

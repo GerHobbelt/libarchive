@@ -124,8 +124,6 @@ IF (CMAKE_C_COMPILER_ID MATCHES "^GNU$" OR
   # either of the following two, yet neither is supported as of 3.0.2
   # - check_linker_flag - does not exist
   # - try_compile - does not support linker flags
-  #
-  # The CI fails with this on MacOS
   IF(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin")
     # Place the functions and data into separate sections, allowing the linker
     # to garbage collect the unused ones.
@@ -135,6 +133,9 @@ IF (CMAKE_C_COMPILER_ID MATCHES "^GNU$" OR
     # Printing the discarded section is "too much", so enable on demand.
     #SET(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -Wl,--print-gc-sections")
     #SET(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} -Wl,--print-gc-sections")
+  ELSE()
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
+    SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-dead_strip")
   ENDIF(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin")
 ENDIF (CMAKE_C_COMPILER_ID MATCHES "^GNU$" OR
        CMAKE_C_COMPILER_ID MATCHES "^Clang$")
@@ -523,7 +524,7 @@ IF(LIBLZMA_FOUND)
     "#include <lzma.h>\nint main() {return (int)lzma_version_number(); }"
     "WITHOUT_LZMA_API_STATIC;LZMA_API_STATIC")
   CHECK_C_SOURCE_COMPILES(
-    "#include <lzma.h>\n#if LZMA_VERSION < 50020000\n#error unsupported\n#endif\nint main(void){lzma_stream_encoder_mt(0, 0); return 0;}"
+    "#include <lzma.h>\n#if LZMA_VERSION < 50020000\n#error unsupported\n#endif\nint main(void){int ignored __attribute__((unused)); ignored = lzma_stream_encoder_mt(0, 0); return 0;}"
     HAVE_LZMA_STREAM_ENCODER_MT)
   IF(NOT WITHOUT_LZMA_API_STATIC AND LZMA_API_STATIC)
     ADD_DEFINITIONS(-DLZMA_API_STATIC)

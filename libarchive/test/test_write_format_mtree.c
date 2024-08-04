@@ -24,8 +24,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "./test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_write_format_mtree.c 191183 2009-04-17 01:06:31Z kientzle $");
+#include "test.h"
 
 static char buff[4096];
 static struct {

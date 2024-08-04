@@ -22,8 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_write_format_cpio_empty.c 201247 2009-12-30 05:59:21Z kientzle $");
+#include "test.h"
 
 /*
  * Check that an "empty" cpio archive is correctly created.

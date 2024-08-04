@@ -22,8 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
-__FBSDID("$FreeBSD$");
+#include "test.h"
 
 #include <limits.h>
 #if defined(_WIN32) && !defined(__CYGWIN__)
@@ -1774,11 +1773,11 @@ test_parent(void)
 	 * Test4: Traverse lock/lock2/dir1 from inside lock.
 	 *
 	 * This test is expected to fail on platforms with no O_EXEC or
-	 * equivalent for directories (e.g. O_PATH on Linux or O_SEARCH on SunOS),
-	 * because the current traversal code can't handle the case where it can't
+	 * equivalent (e.g. O_PATH on Linux or O_SEARCH on SunOS), because
+	 * the current traversal code can't handle the case where it can't
 	 * obtain an open fd for the initial current directory. We need to
-	 * check that condition here, because if O_EXEC for directories _does_
-	 * exist, we don't want to overlook any failure.
+	 * check that condition here, because if O_EXEC _does_ exist, we don't
+	 * want to overlook any failure.
 	 */
 	assertChdir("lock");
 
@@ -1788,7 +1787,8 @@ test_parent(void)
 	archive_entry_clear(ae);
 	r = archive_read_next_header2(a, ae);
 	if (r == ARCHIVE_FAILED) {
-#if defined(O_PATH) || defined(O_SEARCH)
+#if defined(O_PATH) || defined(O_SEARCH) || \
+ (defined(__FreeBSD__) && defined(O_EXEC))
 		if (ignore_traversals_test4 == NULL)
 			assertEqualIntA(a, ARCHIVE_OK, r);
 #endif

@@ -25,7 +25,6 @@
  */
 
 #include "./test.h"
-__FBSDID("$FreeBSD$");
 
 DEFINE_TEST(test_write_filter_zstd)
 {
@@ -161,8 +160,12 @@ DEFINE_TEST(test_write_filter_zstd)
 	    archive_write_set_filter_option(a, NULL, "max-frame-size", "1048576"));
 #endif
 #if ZSTD_VERSION_NUMBER >= MINVER_LONG
-	assertEqualIntA(a, ARCHIVE_OK,
-	    archive_write_set_filter_option(a, NULL, "long", "27"));
+	if ((int)(sizeof(size_t) == 4))
+		assertEqualIntA(a, ARCHIVE_OK,
+		    archive_write_set_filter_option(a, NULL, "long", "26"));
+	else
+		assertEqualIntA(a, ARCHIVE_OK,
+		    archive_write_set_filter_option(a, NULL, "long", "27"));
 	assertEqualIntA(a, ARCHIVE_FAILED,
 	    archive_write_set_filter_option(a, NULL, "long", "-1")); /* negative */
 #endif

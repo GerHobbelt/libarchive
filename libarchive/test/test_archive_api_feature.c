@@ -22,8 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
-__FBSDID("$FreeBSD: src/lib/libarchive/test/test_archive_api_feature.c,v 1.5 2008/05/26 17:00:24 kientzle Exp $");
+#include "test.h"
 
 DEFINE_TEST(test_archive_api_feature)
 {

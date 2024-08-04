@@ -4,8 +4,8 @@ dnl First, define all of the version numbers up front.
 dnl In particular, this allows the version macro to be used in AC_INIT
 
 dnl These first two version numbers are updated automatically on each release.
-m4_define([LIBARCHIVE_VERSION_S],[3.7.2dev])
-m4_define([LIBARCHIVE_VERSION_N],[3007002])
+m4_define([LIBARCHIVE_VERSION_S],[3.7.3dev])
+m4_define([LIBARCHIVE_VERSION_N],[3007003])
 
 dnl bsdtar and bsdcpio versioning tracks libarchive
 m4_define([BSDTAR_VERSION_S],LIBARCHIVE_VERSION_S())
@@ -482,7 +482,7 @@ if test "x$with_lzma" != "xno"; then
                        [#if LZMA_VERSION < 50020000]
                        [#error unsupported]
                        [#endif]],
-                      [[lzma_stream_encoder_mt(0, 0);]])],
+                      [[int ignored __attribute__((unused)); ignored = lzma_stream_encoder_mt(0, 0);]])],
       [ac_cv_lzma_has_mt=yes], [ac_cv_lzma_has_mt=no])])
   if test "x$ac_cv_lzma_has_mt" != xno; then
 	  AC_DEFINE([HAVE_LZMA_STREAM_ENCODER_MT], [1], [Define to 1 if you have the `lzma_stream_encoder_mt' function.])
@@ -614,21 +614,35 @@ fi
 # Checks for supported compiler flags
 AX_APPEND_COMPILE_FLAGS([-Wall -Wformat -Wformat-security])
 
-# Place the functions and data into separate sections, allowing the linker
-# to garbage collect the unused ones.
+# Place the functions and data into separate sections, allowing GNU style
+# linkers to garbage collect the unused ones.
 save_LDFLAGS=$LDFLAGS
 LDFLAGS="$LDFLAGS -Wl,--gc-sections"
 AC_MSG_CHECKING([whether ld supports --gc-sections])
 AC_LINK_IFELSE(
     [AC_LANG_SOURCE([static char UnusedFunc() { return 5; } int main() { return 0;}])],
     [AC_MSG_RESULT([yes])
-        GC_SECTIONS="-Wl,--gc-sections";
+        DEAD_CODE_REMOVAL="-Wl,--gc-sections";
         AX_APPEND_COMPILE_FLAGS([-ffunction-sections -fdata-sections])],
     [AC_MSG_RESULT([no])
-        GC_SECTIONS="";])
+        DEAD_CODE_REMOVAL="";])
 LDFLAGS=$save_LDFLAGS
 
-AC_SUBST(GC_SECTIONS)
+if test "$DEAD_CODE_REMOVAL" == ""; then
+    # Macos linkers have a -dead_strip flag, which is similar to --gc-sections.
+    save_LDFLAGS=$LDFLAGS
+    LDFLAGS="$LDFLAGS -Wl,-dead_strip"
+    AC_MSG_CHECKING([whether ld supports -dead_strip])
+    AC_LINK_IFELSE(
+        [AC_LANG_SOURCE([static char UnusedFunc() { return 5; } int main() { return 0;}])],
+        [AC_MSG_RESULT([yes])
+            DEAD_CODE_REMOVAL="-Wl,-dead_strip";],
+        [AC_MSG_RESULT([no])
+            DEAD_CODE_REMOVAL="";])
+    LDFLAGS=$save_LDFLAGS
+fi
+
+AC_SUBST(DEAD_CODE_REMOVAL)
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST

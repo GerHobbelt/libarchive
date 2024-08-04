@@ -22,8 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
-__FBSDID("$FreeBSD: src/usr.bin/tar/test/test_copy.c,v 1.3 2008/08/15 06:12:02 kientzle Exp $");
+#include "test.h"
 
 #if defined(__CYGWIN__)
 # include <limits.h>

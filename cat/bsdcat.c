@@ -24,7 +24,6 @@
  */
 
 #include "bsdcat_platform.h"
-__FBSDID("$FreeBSD$");
 
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
@@ -144,12 +143,16 @@ int main(int argc, const char** argv)
 		switch (c) {
 		case 'h':
 			usage(stdout, 0);
-			break;
+			/* NOTREACHED */
+			/* Fallthrough */
 		case OPTION_VERSION:
 			version();
-			break;
+			/* NOTREACHED */
+			/* Fallthrough */
 		default:
 			usage(stderr, 1);
+			/* Fallthrough */
+			/* NOTREACHED */
 		}
 	}
 

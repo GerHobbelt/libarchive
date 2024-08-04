@@ -22,8 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
-__FBSDID("$FreeBSD: src/usr.bin/cpio/test/test_passthrough_dotdot.c,v 1.4 2008/08/24 06:21:00 kientzle Exp $");
+#include "test.h"
 
 /*
  * Verify that "cpio -p .." works.

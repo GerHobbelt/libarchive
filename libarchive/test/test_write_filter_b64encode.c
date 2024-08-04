@@ -24,8 +24,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "./test.h"
-__FBSDID("$FreeBSD$");
+#include "test.h"
 
 /*
  * A basic exercise of b64encode reading and writing.

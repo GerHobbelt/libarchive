@@ -23,8 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "./test.h"
-__FBSDID("$FreeBSD$");
+#include "test.h"
 
 #define __LIBARCHIVE_BUILD 1
 #include "archive_getdate.h"

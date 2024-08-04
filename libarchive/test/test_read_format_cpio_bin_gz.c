@@ -22,8 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_read_format_cpio_bin_gz.c 191183 2009-04-17 01:06:31Z kientzle $");
+#include "test.h"
 
 static unsigned char archive[] = {
 31,139,8,0,244,'M','p','C',0,3,';','^','(',202,178,177,242,173,227,11,230,

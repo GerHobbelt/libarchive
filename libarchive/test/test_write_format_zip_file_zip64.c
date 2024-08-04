@@ -28,8 +28,7 @@
  * Development supported by Google Summer of Code 2008.
  */
 
-#include "./test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_write_format_zip.c 201247 2009-12-30 05:59:21Z kientzle $");
+#include "test.h"
 
 /*
  * Detailed byte-for-byte verification of the format of a zip archive

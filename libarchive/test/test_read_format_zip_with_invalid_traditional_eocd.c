@@ -22,9 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
-__FBSDID("$FreeBSD$");
-
+#include "test.h"
 /*
  * Issue 869: zip files without a valid EOCD header aren't loaded even if they
  * have a valid ZIP64 version of said header.

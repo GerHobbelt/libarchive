@@ -22,8 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
-__FBSDID("$FreeBSD: src/lib/libarchive/test/test_compat_tar_hardlink.c,v 1.3 2008/08/11 01:19:36 kientzle Exp $");
+#include "test.h"
 
 /*
  * Background:  There are two written standards for the tar file format.

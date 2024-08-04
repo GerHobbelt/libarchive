@@ -24,7 +24,6 @@
  */
 
 #include "bsdtar_platform.h"
-__FBSDID("$FreeBSD: src/usr.bin/tar/bsdtar.c,v 1.93 2008/11/08 04:43:24 kientzle Exp $");
 
 #ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
@@ -119,11 +118,11 @@ need_report(void)
 }
 #endif
 
-static void		 long_help(void) __LA_DEAD;
+static void		 long_help(void) __LA_NORETURN;
 static void		 only_mode(struct bsdtar *, const char *opt,
 			     const char *valid);
 static void		 set_mode(struct bsdtar *, char opt);
-static void		 version(void) __LA_DEAD;
+static void		 version(void) __LA_NORETURN;
 
 /* A basic set of security flags to request from libarchive. */
 #define	SECURITY					\
@@ -409,8 +408,7 @@ int main(int argc, const char** argv)
 			break;
 		case OPTION_HELP: /* GNU tar, others */
 			long_help();
-			exit(0);
-			break;
+			/* NOTREACHED*/
 		case OPTION_HFS_COMPRESSION: /* Mac OS X v10.6 or later */
 			bsdtar->extract_flags |=
 			    ARCHIVE_EXTRACT_HFS_COMPRESSION_FORCED;
@@ -747,7 +745,7 @@ int main(int argc, const char** argv)
 			break;
 		case OPTION_VERSION: /* GNU convention */
 			version();
-			break;
+			/* NOTREACHED */
 #if 0
 		/*
 		 * The -W longopt feature is handled inside of
@@ -813,7 +811,6 @@ int main(int argc, const char** argv)
 	/* If no "real" mode was specified, treat -h as --help. */
 	if ((bsdtar->mode == '\0') && possible_help_request) {
 		long_help();
-		exit(0);
 	}
 
 	/* Otherwise, a mode is required. */

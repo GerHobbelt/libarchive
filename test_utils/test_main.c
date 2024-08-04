@@ -1245,7 +1245,7 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 		c = *p;
 	}
 	if (actual_count) {
-		actual = calloc(sizeof(char *), actual_count);
+		actual = calloc(actual_count, sizeof(char *));
 		if (actual == NULL) {
 			failure_start(pathname, line, "Can't allocate memory");
 			failure_finish(NULL);
@@ -4179,7 +4179,6 @@ int main(int argc, const char** argv)
 				free(refdir_alloc);
 				free(testprogdir);
 				usage(progname);
-				return (1);
 			}
 			for (i = 0; i < test_num; i++) {
 				tests_run++;
