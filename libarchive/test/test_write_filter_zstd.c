@@ -24,7 +24,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "./test.h"
+#include "test.h"
 
 DEFINE_TEST(test_write_filter_zstd)
 {

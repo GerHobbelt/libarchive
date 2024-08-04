@@ -22,7 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
+#include "test.h"
 
 /* This is a little pointless, as Windows doesn't support symlinks
  * (except for the seriously crippled CreateSymbolicLink API) so these

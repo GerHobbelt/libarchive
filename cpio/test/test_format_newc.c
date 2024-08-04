@@ -22,7 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "./test.h"
+#include "test.h"
 
 /* Number of bytes needed to pad 'n' to multiple of 'block', assuming
  * that 'block' is a power of two. This trick can be more easily

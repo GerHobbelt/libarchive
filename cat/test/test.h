@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Every test program should #include "./test.h" as the first thing. */
+/* Every test program should #include "test.h" as the first thing. */
 
 #define KNOWNREF       "test_expand.Z.uu"
 #define ENVBASE "BSDCAT"  /* Prefix for environment variables. */

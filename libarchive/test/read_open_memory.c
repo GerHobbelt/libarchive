@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "./test.h"
+#include "test.h"
 
 #include <errno.h>
 #include <stdlib.h>

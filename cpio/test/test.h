@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Every test program should #include "./test.h" as the first thing. */
+/* Every test program should #include "test.h" as the first thing. */
 
 #define KNOWNREF	"test_option_f.cpio.uu"
 #define ENVBASE "BSDCPIO" /* Prefix for environment variables. */

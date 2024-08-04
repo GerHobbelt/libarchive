@@ -26,7 +26,7 @@
  *
  * This test case's code has been derived from test_entry.c
  */
-#include "./test.h"
+#include "test.h"
 
 DEFINE_TEST(test_read_pax_xattr_schily)
 {

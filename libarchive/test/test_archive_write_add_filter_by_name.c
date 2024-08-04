@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "./test.h"
+#include "test.h"
 
 static void
 test_filter_by_name(const char *filter_name, int filter_code,
