@@ -163,7 +163,7 @@ int main(int argc, const char** argv)
 	char			 compression, compression2;
 	const char		*compression_name, *compression2_name;
 	const char		*compress_program;
-	char			*tptr;
+	char			*tptr, *uptr;
 	char			 possible_help_request;
 	char			 buff[16];
 
@@ -389,6 +389,36 @@ int main(int argc, const char** argv)
 			break;
 		case OPTION_GNAME: /* cpio */
 			bsdtar->gname = bsdtar->argument;
+			break;
+		case OPTION_GROUP: /* GNU tar */
+			errno = 0;
+			tptr = NULL;
+
+			uptr = strchr(bsdtar->argument, ':');
+			if(uptr != NULL) {
+				if(uptr[1] == 0) {
+					lafe_errc(1, 0, "Invalid argument to --group (missing id after :)");
+				}
+				uptr[0] = 0;
+				uptr++;
+				t = (int)strtol(uptr, &tptr, 10);
+				if (errno || t < 0 || *uptr == '\0' ||
+				    tptr == NULL || *tptr != '\0') {
+					lafe_errc(1, 0, "Invalid argument to --group (%s is not a number)", uptr);
+				} else {
+					bsdtar->gid = t;
+				}
+				bsdtar->gname = bsdtar->argument;
+			} else {
+				t = (int)strtol(bsdtar->argument, &tptr, 10);
+				if (errno || t < 0 || *(bsdtar->argument) == '\0' ||
+				    tptr == NULL || *tptr != '\0') {
+					bsdtar->gname = bsdtar->argument;
+				} else {
+					bsdtar->gid = t;
+					bsdtar->gname = "";
+				}
+			}
 			break;
 		case OPTION_GRZIP:
 			if (compression != '\0')
@@ -633,7 +663,42 @@ int main(int argc, const char** argv)
 			    ARCHIVE_READDISK_NO_TRAVERSE_MOUNTS;
 			break;
 		case OPTION_OPTIONS:
+			if (bsdtar->option_options != NULL) {
+				lafe_warnc(0,
+				    "Ignoring previous option '%s', separate multiple options with commas",
+				    bsdtar->option_options);
+			}
 			bsdtar->option_options = bsdtar->argument;
+			break;
+		case OPTION_OWNER: /* GNU tar */
+			errno = 0;
+			tptr = NULL;
+
+			uptr = strchr(bsdtar->argument, ':');
+			if(uptr != NULL) {
+				if(uptr[1] == 0) {
+					lafe_errc(1, 0, "Invalid argument to --owner (missing id after :)");
+				}
+				uptr[0] = 0;
+				uptr++;
+				t = (int)strtol(uptr, &tptr, 10);
+				if (errno || t < 0 || *uptr == '\0' ||
+				    tptr == NULL || *tptr != '\0') {
+					lafe_errc(1, 0, "Invalid argument to --owner (%s is not a number)", uptr);
+				} else {
+					bsdtar->uid = t;
+				}
+				bsdtar->uname = bsdtar->argument;
+			} else {
+				t = (int)strtol(bsdtar->argument, &tptr, 10);
+				if (errno || t < 0 || *(bsdtar->argument) == '\0' ||
+				    tptr == NULL || *tptr != '\0') {
+					bsdtar->uname = bsdtar->argument;
+				} else {
+					bsdtar->uid = t;
+					bsdtar->uname = "";
+				}
+			}
 			break;
 #if 0
 		/*
@@ -677,7 +742,7 @@ int main(int argc, const char** argv)
 			bsdtar->extract_flags |= ARCHIVE_EXTRACT_SPARSE;
 			break;
 		case 's': /* NetBSD pax-as-tar */
-#if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H)
+#if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H) || defined(HAVE_PCRE2POSIX_H)
 			add_substitution(bsdtar, bsdtar->argument);
 #else
 			lafe_warnc(0,
@@ -956,7 +1021,7 @@ int main(int argc, const char** argv)
 	}
 
 	archive_match_free(bsdtar->matching);
-#if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H)
+#if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H) || defined(HAVE_PCRE2POSIX_H)
 	cleanup_substitution(bsdtar);
 #endif
 	cset_free(bsdtar->cset);
