@@ -55,11 +55,10 @@
 #include <wincrypt.h>
 #endif
 #endif
-#ifdef HAVE_ZLIB_H
-#include <zlib.h>
-#endif
 #ifdef HAVE_ZLIB_NG_H
 #include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
+#include <zlib.h> /* for crc32 and adler32 */
 #endif
 #ifdef HAVE_LZMA_H
 #include <lzma.h>
