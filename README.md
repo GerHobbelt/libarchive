@@ -7,7 +7,7 @@ command-line tools that use the libarchive library.
 
 ## Questions?  Issues?
 
-* http://www.libarchive.org is the home for ongoing
+* https://www.libarchive.org is the home for ongoing
   libarchive development, including documentation,
   and links to the libarchive mailing lists.
 * To report an issue, use the issue tracker at
@@ -23,6 +23,7 @@ This distribution bundle includes the following major components:
 * **tar**: the 'bsdtar' program is a full-featured 'tar' implementation built on libarchive
 * **cpio**: the 'bsdcpio' program is a different interface to essentially the same functionality
 * **cat**: the 'bsdcat' program is a simple replacement tool for zcat, bzcat, xzcat, and such
+* **unzip**: the 'bsdunzip' program is a simple replacement tool for Info-ZIP's unzip
 * **examples**: Some small example programs that you may find useful.
 * **examples/minitar**: a compact sample demonstrating use of libarchive.
 * **contrib**:  Various items sent to me by third parties; please contact the authors with any questions.
@@ -191,6 +192,17 @@ questions we are asked about libarchive:
   platforms do not provide fully thread-safe versions of key C library
   functions.  On those platforms, libarchive will use the non-thread-safe
   functions.  Patches to improve this are of great interest to us.
+
+* The function `archive_write_disk_header()` is _not_ thread safe on
+  POSIX machines and could lead to security issue resulting in world
+  writeable directories.  Thus it must be mutexed by the calling code.
+  This is due to calling `umask(oldumask = umask(0))`, which sets the
+  umask for the whole process to 0 for a short time frame.
+  In case other thread calls the same function in parallel, it might
+  get interrupted by it and cause the executable to use umask=0 for the
+  remaining execution.
+  This will then lead to implicitely created directories to have 777
+  permissions without sticky bit.
 
 * In particular, libarchive's modules to read or write a directory
   tree do use `chdir()` to optimize the directory traversals.  This

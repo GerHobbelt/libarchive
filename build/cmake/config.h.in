@@ -366,7 +366,7 @@ typedef uint64_t uintmax_t;
 /* Define to 1 if you have the <attr/xattr.h> header file. */
 #cmakedefine HAVE_ATTR_XATTR_H 1
 
-/* Define to 1 if you have the <Bcrypt.h> header file. */
+/* Define to 1 if you have the <bcrypt.h> header file. */
 #cmakedefine HAVE_BCRYPT_H 1
 
 /* Define to 1 if you have the <bsdxml.h> header file. */
@@ -617,6 +617,9 @@ typedef uint64_t uintmax_t;
 
 /* Define to 1 if you have the `getgrnam_r' function. */
 #cmakedefine HAVE_GETGRNAM_R 1
+
+/* Define to 1 if platform uses `optreset` to reset `getopt` */
+#cmakedefine HAVE_GETOPT_OPTRESET 1
 
 /* Define to 1 if you have the `getpid' function. */
 #cmakedefine HAVE_GETPID 1

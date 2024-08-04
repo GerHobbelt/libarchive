@@ -1,12 +1,13 @@
-/*-
- * Copyright (c) 2003-2007 Tim Kientzle
+/*
+ * Copyright (c) 2023 Adrian Vovk
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
+ *    notice, this list of conditions and the following disclaimer
+ *    in this position and unchanged.
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
@@ -22,33 +23,22 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "test.h"
 
-#ifndef ARCHIVE_OPENSSL_EVP_PRIVATE_H_INCLUDED
-#define ARCHIVE_OPENSSL_EVP_PRIVATE_H_INCLUDED
-
-#ifndef __LIBARCHIVE_BUILD
-#error This header is only to be used internally to libarchive.
-#endif
-
-#include <openssl/evp.h>
-#include <openssl/opensslv.h>
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || \
-    (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
-#include <stdlib.h> /* malloc, free */
-#include <string.h> /* memset */
-static inline EVP_MD_CTX *EVP_MD_CTX_new(void)
+/* Test that the glob works */
+DEFINE_TEST(test_glob)
 {
-	EVP_MD_CTX *ctx = (EVP_MD_CTX *)calloc(1, sizeof(EVP_MD_CTX));
-	return ctx;
-}
+	const char *reffile = "test_basic.zip";
+	int r;
 
-static inline void EVP_MD_CTX_free(EVP_MD_CTX *ctx)
-{
-	EVP_MD_CTX_cleanup(ctx);
-	memset(ctx, 0, sizeof(*ctx));
-	free(ctx);
-}
-#endif
+	extract_reference_file(reffile);
+	r = systemf("%s %s test_*/[ab] >test.out 2>test.err", testprog, reffile);
+	assertEqualInt(0, r);
+	assertNonEmptyFile("test.out");
+	assertEmptyFile("test.err");
 
-#endif
+	assertTextFileContents("contents a\n", "test_basic/a");
+	assertTextFileContents("contents b\n", "test_basic/b");
+	assertFileNotExists("test_basic/c");
+	assertFileNotExists("test_basic/CAPS");
+}

@@ -22,33 +22,37 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "test.h"
 
-#ifndef ARCHIVE_OPENSSL_EVP_PRIVATE_H_INCLUDED
-#define ARCHIVE_OPENSSL_EVP_PRIVATE_H_INCLUDED
-
-#ifndef __LIBARCHIVE_BUILD
-#error This header is only to be used internally to libarchive.
+/*
+ * This first test does basic sanity checks on the environment.  For
+ * most of these, we just exit on failure.
+ */
+#if !defined(_WIN32) || defined(__CYGWIN__)
+#define DEV_NULL "/dev/null"
+#else
+#define DEV_NULL "NUL"
 #endif
 
-#include <openssl/evp.h>
-#include <openssl/opensslv.h>
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || \
-    (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
-#include <stdlib.h> /* malloc, free */
-#include <string.h> /* memset */
-static inline EVP_MD_CTX *EVP_MD_CTX_new(void)
+DEFINE_TEST(test_0)
 {
-	EVP_MD_CTX *ctx = (EVP_MD_CTX *)calloc(1, sizeof(EVP_MD_CTX));
-	return ctx;
-}
+	struct stat st;
 
-static inline void EVP_MD_CTX_free(EVP_MD_CTX *ctx)
-{
-	EVP_MD_CTX_cleanup(ctx);
-	memset(ctx, 0, sizeof(*ctx));
-	free(ctx);
-}
-#endif
+	failure("File %s does not exist?!", testprog);
+	if (!assertEqualInt(0, stat(testprogfile, &st))) {
+		fprintf(stderr,
+		    "\nFile %s does not exist; aborting test.\n\n",
+		    testprog);
+		exit(1);
+	}
 
-#endif
+	failure("%s is not executable?!", testprog);
+	if (!assert((st.st_mode & 0111) != 0)) {
+		fprintf(stderr,
+		    "\nFile %s not executable; aborting test.\n\n",
+		    testprog);
+		exit(1);
+	}
+
+	/* TODO: Ensure that our reference files are available. */
+}

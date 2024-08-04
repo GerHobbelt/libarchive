@@ -199,6 +199,8 @@ ENDIF (MSVC)
 # Enable CTest/CDash support
 include(CTest)
 
+option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+
 OPTION(ENABLE_MBEDTLS "Enable use of mbed TLS" OFF)
 OPTION(ENABLE_NETTLE "Enable use of Nettle" OFF)
 OPTION(ENABLE_OPENSSL "Enable use of OpenSSL" ON)
@@ -223,6 +225,8 @@ OPTION(ENABLE_CPIO "Enable cpio building" ON)
 OPTION(ENABLE_CPIO_SHARED "Enable dynamic build of cpio" FALSE)
 OPTION(ENABLE_CAT "Enable cat building" ON)
 OPTION(ENABLE_CAT_SHARED "Enable dynamic build of cat" FALSE)
+OPTION(ENABLE_UNZIP "Enable unzip building" ON)
+OPTION(ENABLE_UNZIP_SHARED "Enable dynamic build of unzip" FALSE)
 OPTION(ENABLE_XATTR "Enable extended attribute support" ON)
 OPTION(ENABLE_ACL "Enable ACL support" ON)
 OPTION(ENABLE_ICONV "Enable iconv support" ON)
@@ -370,7 +374,11 @@ MACRO (TRY_MACRO_FOR_LIBRARY INCLUDES LIBRARIES
       IF("${TRY_TYPE}" MATCHES "COMPILES")
         CHECK_C_SOURCE_COMPILES("${SAMPLE_SOURCE}" ${VAR})
       ELSEIF("${TRY_TYPE}" MATCHES "RUNS")
-        CHECK_C_SOURCE_RUNS("${SAMPLE_SOURCE}" ${VAR})
+        IF(CMAKE_CROSSCOMPILING)
+          MESSAGE(WARNING "Cannot test run \"${VAR}\" when cross-compiling")
+        ELSE(CMAKE_CROSSCOMPILING)
+          CHECK_C_SOURCE_RUNS("${SAMPLE_SOURCE}" ${VAR})
+        ENDIF(CMAKE_CROSSCOMPILING)
       ELSE("${TRY_TYPE}" MATCHES "COMPILES")
         MESSAGE(FATAL_ERROR "UNKNOWN KEYWORD \"${TRY_TYPE}\" FOR TRY_TYPE")
       ENDIF("${TRY_TYPE}" MATCHES "COMPILES")
@@ -508,12 +516,16 @@ IF(LIBLZMA_FOUND)
     COMPILES
     "#include <lzma.h>\nint main() {return (int)lzma_version_number(); }"
     "WITHOUT_LZMA_API_STATIC;LZMA_API_STATIC")
+  CHECK_C_SOURCE_COMPILES(
+    "#include <lzma.h>\n#if LZMA_VERSION < 50020000\n#error unsupported\n#endif\nint main(void){lzma_stream_encoder_mt(0, 0); return 0;}"
+    HAVE_LZMA_STREAM_ENCODER_MT)
   IF(NOT WITHOUT_LZMA_API_STATIC AND LZMA_API_STATIC)
     ADD_DEFINITIONS(-DLZMA_API_STATIC)
   ENDIF(NOT WITHOUT_LZMA_API_STATIC AND LZMA_API_STATIC)
   CMAKE_POP_CHECK_STATE()
 ELSE(LIBLZMA_FOUND)
 # LZMA not found and will not be used.
+  SET(HAVE_LZMA_STREAM_ENCODER_MT 0)
 ENDIF(LIBLZMA_FOUND)
 MARK_AS_ADVANCED(CLEAR LIBLZMA_INCLUDE_DIR)
 MARK_AS_ADVANCED(CLEAR LIBLZMA_LIBRARY)
@@ -567,6 +579,7 @@ IF(LIBB2_FOUND)
   SET(HAVE_BLAKE2_H 1)
   SET(ARCHIVE_BLAKE2 FALSE)
   LIST(APPEND ADDITIONAL_LIBS ${LIBB2_LIBRARY})
+  INCLUDE_DIRECTORIES(${LIBB2_INCLUDE_DIR})
   CMAKE_PUSH_CHECK_STATE()
   SET(CMAKE_REQUIRED_LIBRARIES ${LIBB2_LIBRARY})
   SET(CMAKE_REQUIRED_INCLUDES ${LIBB2_INCLUDE_DIR})
@@ -735,9 +748,9 @@ LA_CHECK_INCLUDE_FILE("wchar.h" HAVE_WCHAR_H)
 LA_CHECK_INCLUDE_FILE("wctype.h" HAVE_WCTYPE_H)
 LA_CHECK_INCLUDE_FILE("windows.h" HAVE_WINDOWS_H)
 IF(ENABLE_CNG)
-  LA_CHECK_INCLUDE_FILE("Bcrypt.h" HAVE_BCRYPT_H)
+  LA_CHECK_INCLUDE_FILE("bcrypt.h" HAVE_BCRYPT_H)
   IF(HAVE_BCRYPT_H)
-    LIST(APPEND ADDITIONAL_LIBS "Bcrypt")
+    LIST(APPEND ADDITIONAL_LIBS "bcrypt")
   ENDIF(HAVE_BCRYPT_H)
 ELSE(ENABLE_CNG)
   UNSET(HAVE_BCRYPT_H CACHE)
@@ -1462,6 +1475,9 @@ CHECK_C_SOURCE_COMPILES(
   "#include <fcntl.h>\n#include <unistd.h>\nint main() {char buf[10]; return readlinkat(AT_FDCWD, \"\", buf, 0);}"
   HAVE_READLINKAT)
 
+# Check for getopt uses optreset to reset
+CHECK_SYMBOL_EXISTS(optreset "getopt.h" HAVE_GETOPT_OPTRESET)
+
 
 # To verify major(), we need to both include the header
 # of interest and verify that the result can be linked.
@@ -1473,14 +1489,6 @@ CHECK_C_SOURCE_COMPILES(
 CHECK_C_SOURCE_COMPILES(
   "#include <sys/sysmacros.h>\nint main() { return major(256); }"
   MAJOR_IN_SYSMACROS)
-
-IF(ENABLE_LZMA)
-CHECK_C_SOURCE_COMPILES(
-  "#include <lzma.h>\n#if LZMA_VERSION < 50020000\n#error unsupported\n#endif\nint main(void){lzma_stream_encoder_mt(0, 0); return 0;}"
-  HAVE_LZMA_STREAM_ENCODER_MT)
-ELSE()
-  SET(HAVE_LZMA_STREAM_ENCODER_MT 0)
-ENDIF(ENABLE_LZMA)
 
 IF(HAVE_STRERROR_R)
   SET(HAVE_DECL_STRERROR_R 1)
@@ -2094,3 +2102,4 @@ add_subdirectory(libarchive)
 add_subdirectory(cat)
 add_subdirectory(tar)
 add_subdirectory(cpio)
+add_subdirectory(unzip)

@@ -1,5 +1,5 @@
-/*-
- * Copyright (c) 2003-2007 Tim Kientzle
+/*
+ * Copyright (c) 2003-2017 Tim Kientzle
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -21,34 +21,20 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * $FreeBSD$
  */
 
-#ifndef ARCHIVE_OPENSSL_EVP_PRIVATE_H_INCLUDED
-#define ARCHIVE_OPENSSL_EVP_PRIVATE_H_INCLUDED
+/* Every test program should #include "test.h" as the first thing. */
 
-#ifndef __LIBARCHIVE_BUILD
-#error This header is only to be used internally to libarchive.
-#endif
+#define KNOWNREF	"test_basic.zip.uu"
+#define ENVBASE "BSDUNZIP" /* Prefix for environment variables. */
+#define	PROGRAM "bsdunzip" /* Name of program being tested. */
+#define PROGRAM_ALIAS "unzip" /* Generic alias for program */
+#undef	LIBRARY		  /* Not testing a library. */
+#undef	EXTRA_DUMP	  /* How to dump extra data */
+#undef	EXTRA_ERRNO	  /* How to dump errno */
+/* How to generate extra version info. */
+#define	EXTRA_VERSION    (system(testprog) ? "" : "")
 
-#include <openssl/evp.h>
-#include <openssl/opensslv.h>
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || \
-    (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
-#include <stdlib.h> /* malloc, free */
-#include <string.h> /* memset */
-static inline EVP_MD_CTX *EVP_MD_CTX_new(void)
-{
-	EVP_MD_CTX *ctx = (EVP_MD_CTX *)calloc(1, sizeof(EVP_MD_CTX));
-	return ctx;
-}
-
-static inline void EVP_MD_CTX_free(EVP_MD_CTX *ctx)
-{
-	EVP_MD_CTX_cleanup(ctx);
-	memset(ctx, 0, sizeof(*ctx));
-	free(ctx);
-}
-#endif
-
-#endif
+#include "test_common.h"
