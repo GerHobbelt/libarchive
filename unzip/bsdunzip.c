@@ -296,7 +296,7 @@ pathcat(const char *prefix, const char *path)
  */
 struct pattern {
 	STAILQ_ENTRY(pattern) link;
-	char pattern[];
+	char pattern[0];
 };
 
 STAILQ_HEAD(pattern_list, pattern);
