@@ -2986,7 +2986,7 @@ expand(struct archive_read *a, int64_t *end)
 
       if ((lensymbol = read_next_symbol(a, &rar->lengthcode)) < 0)
         goto bad_data;
-      if (lensymbol > lengthb_min)
+      if (lensymbol >= lengthb_min)
         goto bad_data;
       len = lengthbases[lensymbol] + 2;
       if (lengthbits[lensymbol] > 0) {
@@ -3018,7 +3018,7 @@ expand(struct archive_read *a, int64_t *end)
     }
     else
     {
-      if (symbol-271 > lengthb_min)
+      if (symbol-271 >= lengthb_min)
         goto bad_data;
       len = lengthbases[symbol-271]+3;
       if(lengthbits[symbol-271] > 0) {
@@ -3030,7 +3030,7 @@ expand(struct archive_read *a, int64_t *end)
 
       if ((offssymbol = read_next_symbol(a, &rar->offsetcode)) < 0)
         goto bad_data;
-      if (offssymbol > offsetb_min)
+      if (offssymbol >= offsetb_min)
         goto bad_data;
       offs = offsetbases[offssymbol]+1;
       if(offsetbits[offssymbol] > 0)
@@ -3364,7 +3364,10 @@ create_filter(struct rar_program_code *prog, const uint8_t *globaldata, uint32_t
   filter->globaldatalen = globaldatalen > PROGRAM_SYSTEM_GLOBAL_SIZE ? globaldatalen : PROGRAM_SYSTEM_GLOBAL_SIZE;
   filter->globaldata = calloc(1, filter->globaldatalen);
   if (!filter->globaldata)
+  {
+    free(filter);
     return NULL;
+  }
   if (globaldata)
     memcpy(filter->globaldata, globaldata, globaldatalen);
   if (registers)

@@ -1352,9 +1352,12 @@ header_common(struct archive_read *a, struct tar *tar,
 							  archive_strlen(&linkpath), tar->sconv) != 0) {
 				err = set_conversion_failed_error(a, tar->sconv,
 								  "Linkname");
-				if (err == ARCHIVE_FATAL)
+				if (err == ARCHIVE_FATAL) {
+					archive_string_free(&linkpath);
 					return (err);
+				}
 			}
+			archive_string_free(&linkpath);
 		}
 		/*
 		 * The following may seem odd, but: Technically, tar
@@ -1425,9 +1428,12 @@ header_common(struct archive_read *a, struct tar *tar,
 			    archive_strlen(&linkpath), tar->sconv) != 0) {
 				err = set_conversion_failed_error(a, tar->sconv,
 				    "Linkname");
-				if (err == ARCHIVE_FATAL)
+				if (err == ARCHIVE_FATAL) {
+					archive_string_free(&linkpath);
 					return (err);
+				}
 			}
+			archive_string_free(&linkpath);
 		}
 		archive_entry_set_filetype(entry, AE_IFLNK);
 		archive_entry_set_size(entry, 0);
