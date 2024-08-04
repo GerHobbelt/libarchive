@@ -454,6 +454,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_filter_program.c \
 	libarchive/test/test_read_filter_program_signature.c \
 	libarchive/test/test_read_filter_uudecode.c \
+	libarchive/test/test_read_filter_uudecode_raw.c \
 	libarchive/test/test_read_format_7zip.c \
 	libarchive/test/test_read_format_7zip_encryption_data.c \
 	libarchive/test/test_read_format_7zip_encryption_partially.c \
@@ -748,6 +749,8 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_filter_lrzip.tar.lrz.uu \
 	libarchive/test/test_read_filter_lzop.tar.lzo.uu \
 	libarchive/test/test_read_filter_lzop_multiple_parts.tar.lzo.uu \
+	libarchive/test/test_read_filter_uudecode_raw.uu \
+	libarchive/test/test_read_filter_uudecode_base64_raw.uu \
 	libarchive/test/test_read_format_mtree_crash747.mtree.bz2.uu \
 	libarchive/test/test_read_format_mtree_noprint.mtree.uu \
 	libarchive/test/test_read_format_7zip_bcj2_bzip2.7z.uu \
@@ -790,6 +793,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_7zip_ppmd.7z.uu \
 	libarchive/test/test_read_format_7zip_solid_zstd.7z.uu \
 	libarchive/test/test_read_format_7zip_symbolic_name.7z.uu \
+	libarchive/test/test_read_format_7zip_win_attrib.7z.uu \
 	libarchive/test/test_read_format_7zip_zstd_arm.7z.uu \
 	libarchive/test/test_read_format_7zip_zstd_bcj.7z.uu \
 	libarchive/test/test_read_format_7zip_zstd_nobcj.7z.uu \
@@ -1451,7 +1455,9 @@ bsdcat_test_EXTRA_DIST= \
 
 bsdunzip_SOURCES= \
 		unzip/bsdunzip.c \
+		unzip/bsdunzip.h \
 		unzip/bsdunzip_platform.h \
+		unzip/cmdline.c \
 		unzip/la_getline.c \
 		unzip/la_queue.h
 
@@ -1489,7 +1495,7 @@ bsdunzip_programs=
 endif
 
 #
-# bsdcat_test
+# bsdunzip_test
 #
 
 bsdunzip_test_SOURCES= \
@@ -1510,6 +1516,7 @@ bsdunzip_test_SOURCES= \
 	unzip/test/test_q.c \
 	unzip/test/test_t.c \
 	unzip/test/test_t_bad.c \
+	unzip/test/test_version.c \
 	unzip/test/test_x.c \
 	unzip/test/test_Z1.c \
 	unzip/test/test_P_encryption.c
