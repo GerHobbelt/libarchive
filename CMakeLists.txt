@@ -107,7 +107,7 @@ endif ()
 # aggressive about diagnosing build problems; this can get
 # relaxed somewhat in final shipping versions.
 IF (CMAKE_C_COMPILER_ID MATCHES "^GNU$" OR
-    CMAKE_C_COMPILER_ID MATCHES "^Clang$")
+    CMAKE_C_COMPILER_ID MATCHES "^Clang$" AND NOT MSVC)
   SET(CMAKE_REQUIRED_FLAGS "-Wall -Wformat -Wformat-security")
   #################################################################
   # Set compile flags for all build types.
@@ -144,7 +144,7 @@ IF (CMAKE_C_COMPILER_ID MATCHES "^GNU$" OR
     SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-dead_strip")
   ENDIF(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin")
 ENDIF (CMAKE_C_COMPILER_ID MATCHES "^GNU$" OR
-       CMAKE_C_COMPILER_ID MATCHES "^Clang$")
+       CMAKE_C_COMPILER_ID MATCHES "^Clang$" AND NOT MSVC)
 IF (CMAKE_C_COMPILER_ID MATCHES "^XL$")
   SET(CMAKE_C_COMPILER "xlc_r")
   SET(CMAKE_REQUIRED_FLAGS "-qflag=e:e -qformat=sec")
@@ -744,7 +744,6 @@ LA_CHECK_INCLUDE_FILE("sys/mkdev.h" HAVE_SYS_MKDEV_H)
 LA_CHECK_INCLUDE_FILE("sys/mount.h" HAVE_SYS_MOUNT_H)
 LA_CHECK_INCLUDE_FILE("sys/param.h" HAVE_SYS_PARAM_H)
 LA_CHECK_INCLUDE_FILE("sys/poll.h" HAVE_SYS_POLL_H)
-LA_CHECK_INCLUDE_FILE("sys/queue.h" HAVE_SYS_QUEUE_H)
 LA_CHECK_INCLUDE_FILE("sys/richacl.h" HAVE_SYS_RICHACL_H)
 LA_CHECK_INCLUDE_FILE("sys/select.h" HAVE_SYS_SELECT_H)
 LA_CHECK_INCLUDE_FILE("sys/stat.h" HAVE_SYS_STAT_H)
