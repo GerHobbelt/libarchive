@@ -768,6 +768,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_7zip_copy.7z.uu \
 	libarchive/test/test_read_format_7zip_copy_2.7z.uu \
 	libarchive/test/test_read_format_7zip_deflate.7z.uu \
+	libarchive/test/test_read_format_7zip_deflate_arm64.7z.uu \
 	libarchive/test/test_read_format_7zip_delta_lzma1.7z.uu \
 	libarchive/test/test_read_format_7zip_delta4_lzma1.7z.uu \
 	libarchive/test/test_read_format_7zip_delta_lzma2.7z.uu \
@@ -781,11 +782,18 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_7zip_lzma1_2.7z.uu \
 	libarchive/test/test_read_format_7zip_lzma1_lzma2.7z.uu \
 	libarchive/test/test_read_format_7zip_lzma2.7z.uu \
+	libarchive/test/test_read_format_7zip_lzma2_arm64.7z.uu \
+	libarchive/test/test_read_format_7zip_lzma2_arm.7z.uu \
 	libarchive/test/test_read_format_7zip_malformed.7z.uu \
 	libarchive/test/test_read_format_7zip_malformed2.7z.uu \
 	libarchive/test/test_read_format_7zip_packinfo_digests.7z.uu \
 	libarchive/test/test_read_format_7zip_ppmd.7z.uu \
+	libarchive/test/test_read_format_7zip_solid_zstd.7z.uu \
 	libarchive/test/test_read_format_7zip_symbolic_name.7z.uu \
+	libarchive/test/test_read_format_7zip_zstd_arm.7z.uu \
+	libarchive/test/test_read_format_7zip_zstd_bcj.7z.uu \
+	libarchive/test/test_read_format_7zip_zstd_nobcj.7z.uu \
+	libarchive/test/test_read_format_7zip_zstd.7z.uu \
 	libarchive/test/test_read_format_ar.ar.uu \
 	libarchive/test/test_read_format_cab_1.cab.uu \
 	libarchive/test/test_read_format_cab_2.cab.uu \
@@ -1409,6 +1417,7 @@ bsdcat_test_CPPFLAGS= \
 bsdcat_test_LDADD=libarchive_fe.la
 
 cat/test/list.h: Makefile
+	$(MKDIR_P) cat/test
 	cat $(top_srcdir)/cat/test/test_*.c | grep '^DEFINE_TEST' > cat/test/list.h
 
 if BUILD_BSDCAT
@@ -1442,8 +1451,9 @@ bsdcat_test_EXTRA_DIST= \
 
 bsdunzip_SOURCES= \
 		unzip/bsdunzip.c \
-		unzip/bsdunzip.h \
-		unzip/bsdunzip_platform.h
+		unzip/bsdunzip_platform.h \
+		unzip/la_getline.c \
+		unzip/la_queue.h
 
 if INC_WINDOWS_FILES
 bsdunzip_SOURCES+=
@@ -1513,6 +1523,7 @@ bsdunzip_test_CPPFLAGS= \
 bsdunzip_test_LDADD=libarchive_fe.la
 
 unzip/test/list.h: Makefile
+	$(MKDIR_P) unzip/test
 	cat $(top_srcdir)/unzip/test/test_*.c | grep '^DEFINE_TEST' > unzip/test/list.h
 
 if BUILD_BSDUNZIP
@@ -1527,4 +1538,6 @@ bsdunzip_test_EXTRA_DIST= \
 	unzip/test/list.h \
 	unzip/test/test_basic.zip.uu \
 	unzip/test/test_encrypted.zip.uu \
+	unzip/test/test_singlefile.zip.uu \
+	unzip/test/test_t_bad.zip.uu \
 	unzip/test/CMakeLists.txt

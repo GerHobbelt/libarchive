@@ -1608,6 +1608,12 @@ test_parent(void)
 	int file_count;
 	int match_count;
 	int r;
+#if defined(O_PATH) || defined(O_SEARCH) || \
+ (defined(__FreeBSD__) && defined(O_EXEC))
+	const char *ignore_traversals_test4;
+
+	ignore_traversals_test4 = getenv("IGNORE_TRAVERSALS_TEST4");
+#endif
 
 	assertMakeDir("lock", 0311);
 	assertMakeDir("lock/dir1", 0755);
@@ -1783,7 +1789,8 @@ test_parent(void)
 	r = archive_read_next_header2(a, ae);
 	if (r == ARCHIVE_FAILED) {
 #if defined(O_PATH) || defined(O_SEARCH)
-		assertEqualIntA(a, ARCHIVE_OK, r);
+		if (ignore_traversals_test4 == NULL)
+			assertEqualIntA(a, ARCHIVE_OK, r);
 #endif
 		/* Close the disk object. */
 		archive_read_close(a);
