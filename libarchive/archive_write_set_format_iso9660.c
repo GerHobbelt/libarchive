@@ -46,11 +46,10 @@
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
-#ifdef HAVE_ZLIB_H
-#include <zlib.h>
-#endif
 #ifdef HAVE_ZLIB_NG_H
 #include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
+#include <zlib.h>
 #endif
 
 #include "archive.h"

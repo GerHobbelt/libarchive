@@ -100,7 +100,9 @@ archive_version_details(void)
 const char *
 archive_zlib_version(void)
 {
-#ifdef HAVE_ZLIB_H
+#ifdef HAVE_ZLIB_NG_H
+	return ZLIBNG_VERSION;
+#elif defined(HAVE_ZLIB_H)
 	return ZLIB_VERSION;
 #else
 	return NULL;

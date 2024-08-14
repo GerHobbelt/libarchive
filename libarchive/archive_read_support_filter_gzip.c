@@ -346,7 +346,7 @@ consume_header(struct archive_read_filter *self)
 	__archive_read_filter_consume(self->upstream, len);
 
 	/* Initialize CRC accumulator. */
-	state->crc = crc32(0L, NULL, 0);
+	state->crc = zng_crc32(0L, NULL, 0);
 
 	/* Initialize compression library. */
 	state->stream.next_in = (unsigned char *)(uintptr_t)

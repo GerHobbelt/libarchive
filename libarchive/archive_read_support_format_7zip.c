@@ -37,11 +37,10 @@
 #ifdef HAVE_LZMA_H
 #include <lzma.h>
 #endif
-#ifdef HAVE_ZLIB_H
-#include <zlib.h>
-#endif
 #ifdef HAVE_ZLIB_NG_H
 #include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
+#include <zlib.h>
 #endif
 #ifdef HAVE_ZSTD_H
 #include <zstd.h>
@@ -568,7 +567,7 @@ check_7zip_header_in_sfx(const char *p)
 		 * Magic Code, so we should do this in order not to
 		 * make a mis-detection.
 		 */
-		if (crc32(0, (const unsigned char *)p + 12, 20)
+		if (zng_crc32(0, (const unsigned char *)p + 12, 20)
 			!= archive_le32dec(p + 8))
 			return (6);
 		/* Hit the header! */
@@ -693,7 +692,7 @@ archive_read_format_7zip_read_header(struct archive_read *a,
 
 	zip->entry_offset = 0;
 	zip->end_of_entry = 0;
-	zip->entry_crc32 = crc32(0, NULL, 0);
+	zip->entry_crc32 = zng_crc32(0, NULL, 0);
 
 	/* Setup a string conversion for a filename. */
 	if (zip->sconv == NULL) {
@@ -899,7 +898,7 @@ archive_read_format_7zip_read_data(struct archive_read *a,
 
 	/* Update checksum */
 	if ((zip->entry->flg & CRC32_IS_SET) && bytes)
-		zip->entry_crc32 = crc32(zip->entry_crc32, *buff,
+		zip->entry_crc32 = zng_crc32(zip->entry_crc32, *buff,
 		    (unsigned)bytes);
 
 	/* If we hit the end, swallow any end-of-data marker. */
@@ -2981,7 +2980,7 @@ header_bytes(struct archive_read *a, size_t rbytes)
 	}
 
 	/* Update checksum */
-	zip->header_crc32 = crc32(zip->header_crc32, p, (unsigned)rbytes);
+	zip->header_crc32 = zng_crc32(zip->header_crc32, p, (unsigned)rbytes);
 	return (p);
 }
 
@@ -3015,7 +3014,7 @@ slurp_central_directory(struct archive_read *a, struct _7zip *zip,
 	}
 
 	/* CRC check. */
-	if (crc32(0, (const unsigned char *)p + 12, 20)
+	if (zng_crc32(0, (const unsigned char *)p + 12, 20)
 	    != archive_le32dec(p + 8)) {
 #ifndef DONT_FAIL_ON_CRC_ERROR
 		archive_set_error(&a->archive, -1, "Header CRC error");
