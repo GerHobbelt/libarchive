@@ -38,6 +38,7 @@
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <windows.h>
+#include <direct.h>			// _mkdir
 #endif
 
 #define BLOCKSIZE 512
