@@ -142,7 +142,7 @@ int main(int argc, const char** argv)
 	bsdcat->argv = argv;
 	bsdcat->argc = argc;
 
-	while ((c = bsdcat_getopt(bsdcat)) != -1) {
+	if ((c = bsdcat_getopt(bsdcat)) != -1) {
 		switch (c) {
 		case 'h':
 			usage(stdout, 0);
