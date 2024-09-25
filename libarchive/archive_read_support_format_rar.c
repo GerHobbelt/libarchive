@@ -3430,10 +3430,10 @@ run_filters(struct archive_read *a)
       return 0;
   }
 
-  if ( filter->blocklength > VM_MEMORY_SIZE )
+  if (filter->blocklength > VM_MEMORY_SIZE)
   {
     archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT, "Bad RAR file data");
-    return 0LL;
+    return 0;
   }
 
   ret = copy_from_lzss_window(a, filters->vm->memory, start, filter->blocklength);
@@ -3692,7 +3692,7 @@ execute_filter_e8(struct rar_filter *filter, struct rar_virtual_machine *vm, siz
     {
       uint32_t currpos = (uint32_t)pos + i + 1;
       int32_t address = (int32_t)vm_read_32(vm, i + 1);
-      if (address < 0 && currpos >= -(uint32_t)address)
+      if (address < 0 && currpos >= (~(uint32_t)address + 1))
         vm_write_32(vm, i + 1, address + filesize);
       else if (address >= 0 && (uint32_t)address < filesize)
         vm_write_32(vm, i + 1, address - currpos);
