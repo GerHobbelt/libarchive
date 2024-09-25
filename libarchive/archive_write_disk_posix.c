@@ -707,7 +707,7 @@ _archive_write_disk_header(struct archive *_a, struct archive_entry *entry)
 			const void *attr_value;
 			size_t attr_size;
 			int i = archive_entry_xattr_reset(a->entry);
-			while (i--) {
+			while (i-- > 0) {
 				archive_entry_xattr_next(a->entry, &attr_name,
 				    &attr_value, &attr_size);
 				if (attr_name != NULL && attr_value != NULL &&
@@ -4505,7 +4505,7 @@ set_xattrs(struct archive_write_disk *a)
 
 	archive_string_init(&errlist);
 
-	while (i--) {
+	while (i-- > 0) {
 		const char *name;
 		const void *value;
 		size_t size;
@@ -4591,11 +4591,11 @@ set_xattrs(struct archive_write_disk *a)
 	struct archive_string errlist;
 	int ret = ARCHIVE_OK;
 	int i = archive_entry_xattr_reset(entry);
-	short fail = 0;
+	int fail = 0;
 
 	archive_string_init(&errlist);
 
-	while (i--) {
+	while (i-- > 0) {
 		const char *name;
 		const void *value;
 		size_t size;
@@ -4648,7 +4648,7 @@ set_xattrs(struct archive_write_disk *a)
 				e = extattr_set_fd(a->fd, namespace, name,
 				    value, size);
 				if (e == 0 && errno == 0) {
-					e = size;
+					e = (int)size;
 				}
 			} else {
 				e = extattr_set_link(

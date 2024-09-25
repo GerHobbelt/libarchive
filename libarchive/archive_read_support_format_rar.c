@@ -513,10 +513,10 @@ rar_br_fillup(struct archive_read *a, struct rar_br *br)
             ((uint64_t)br->next_in[1]) << 48 |
             ((uint64_t)br->next_in[2]) << 40 |
             ((uint64_t)br->next_in[3]) << 32 |
-            ((uint32_t)br->next_in[4]) << 24 |
-            ((uint32_t)br->next_in[5]) << 16 |
-            ((uint32_t)br->next_in[6]) << 8 |
-             (uint32_t)br->next_in[7];
+            ((uint64_t)br->next_in[4]) << 24 |
+            ((uint64_t)br->next_in[5]) << 16 |
+            ((uint64_t)br->next_in[6]) << 8 |
+             (uint64_t)br->next_in[7];
         br->next_in += 8;
         br->avail_in -= 8;
         br->cache_avail += 8 * 8;
@@ -532,10 +532,10 @@ rar_br_fillup(struct archive_read *a, struct rar_br *br)
             ((uint64_t)br->next_in[0]) << 48 |
             ((uint64_t)br->next_in[1]) << 40 |
             ((uint64_t)br->next_in[2]) << 32 |
-            ((uint32_t)br->next_in[3]) << 24 |
-            ((uint32_t)br->next_in[4]) << 16 |
-            ((uint32_t)br->next_in[5]) << 8 |
-             (uint32_t)br->next_in[6];
+            ((uint64_t)br->next_in[3]) << 24 |
+            ((uint64_t)br->next_in[4]) << 16 |
+            ((uint64_t)br->next_in[5]) << 8 |
+             (uint64_t)br->next_in[6];
         br->next_in += 7;
         br->avail_in -= 7;
         br->cache_avail += 7 * 8;
@@ -550,10 +550,10 @@ rar_br_fillup(struct archive_read *a, struct rar_br *br)
            (br->cache_buffer << 48) |
             ((uint64_t)br->next_in[0]) << 40 |
             ((uint64_t)br->next_in[1]) << 32 |
-            ((uint32_t)br->next_in[2]) << 24 |
-            ((uint32_t)br->next_in[3]) << 16 |
-            ((uint32_t)br->next_in[4]) << 8 |
-             (uint32_t)br->next_in[5];
+            ((uint64_t)br->next_in[2]) << 24 |
+            ((uint64_t)br->next_in[3]) << 16 |
+            ((uint64_t)br->next_in[4]) << 8 |
+             (uint64_t)br->next_in[5];
         br->next_in += 6;
         br->avail_in -= 6;
         br->cache_avail += 6 * 8;
@@ -2609,8 +2609,7 @@ read_next_symbol(struct archive_read *a, struct huffman_code *code)
   rar_br_consume(br, code->tablesize);
 
   node = value;
-  while (!(code->tree[node].branches[0] ==
-    code->tree[node].branches[1]))
+  while (code->tree[node].branches[0] != code->tree[node].branches[1])
   {
     if (!rar_br_read_ahead(a, br, 1)) {
       archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
