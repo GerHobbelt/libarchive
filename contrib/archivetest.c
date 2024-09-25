@@ -92,7 +92,7 @@ static void usage(const char *prog)
 	fprintf(stderr, "Usage: %s [-f filename] [-h] [-q] [-s]\n", prog);
 }
 
-static void printhelp()
+static void printhelp(void)
 {
 	fprintf(stdout, "archivetest: verify reading archives with "
 	    "libarchive\n\n"
