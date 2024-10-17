@@ -398,7 +398,7 @@ if test "x$with_bz2lib" != "xno"; then
       LIBS="-lbz2 $LIBS"
       AC_LINK_IFELSE(
         [AC_LANG_SOURCE(#include <bzlib.h>
-          int main() { return BZ2_bzDecompressInit(NULL, 0, 0); })],
+          int main(void) { return BZ2_bzDecompressInit(NULL, 0, 0); })],
         [ac_cv_lib_bz2_BZ2_bzDecompressInit=yes],
         [ac_cv_lib_bz2_BZ2_bzDecompressInit=no])
       LIBS="$old_LIBS"
@@ -583,13 +583,13 @@ if test -z $posix_regex_lib_found && (test "$enable_posix_regex_lib" = "auto" ||
       AC_MSG_CHECKING(if PCRE_STATIC needs to be defined)
       AC_LINK_IFELSE(
         [AC_LANG_SOURCE(#include <pcreposix.h>
-          int main() { return regcomp(NULL, NULL, 0); })],
+          int main(void) { return regcomp(NULL, NULL, 0); })],
         [without_pcre_static=yes],
         [without_pcre_static=no])
       AC_LINK_IFELSE(
         [AC_LANG_SOURCE(#define PCRE_STATIC
           #include <pcreposix.h>
-          int main() { return regcomp(NULL, NULL, 0); })],
+          int main(void) { return regcomp(NULL, NULL, 0); })],
         [with_pcre_static=yes],
         [with_pcre_static=no])
       if test "x$without_pcre_static" != xyes && test "x$with_pcre_static" = xyes; then
@@ -616,13 +616,13 @@ if test -z $posix_regex_lib_found && (test "$enable_posix_regex_lib" = "auto" ||
       AC_MSG_CHECKING(if PCRE2_STATIC needs to be defined)
       AC_LINK_IFELSE(
         [AC_LANG_SOURCE(#include <pcre2posix.h>
-          int main() { return pcre2_regcomp(NULL, NULL, 0); })],
+          int main(void) { return pcre2_regcomp(NULL, NULL, 0); })],
         [without_pcre2_static=yes],
         [without_pcre2_static=no])
       AC_LINK_IFELSE(
         [AC_LANG_SOURCE(#define PCRE2_STATIC
           #include <pcre2posix.h>
-          int main() { return pcre2_regcomp(NULL, NULL, 0); })],
+          int main(void) { return pcre2_regcomp(NULL, NULL, 0); })],
         [with_pcre2_static=yes],
         [with_pcre2_static=no])
       if test "x$without_pcre2_static" != xyes && test "x$with_pcre2_static" = xyes; then
@@ -654,7 +654,7 @@ save_LDFLAGS=$LDFLAGS
 LDFLAGS="$LDFLAGS -Wl,--gc-sections"
 AC_MSG_CHECKING([whether ld supports --gc-sections])
 AC_LINK_IFELSE(
-    [AC_LANG_SOURCE([static char UnusedFunc() { return 5; } int main() { return 0;}])],
+    [AC_LANG_SOURCE([static char UnusedFunc() { return 5; } int main(void) { return 0;}])],
     [AC_MSG_RESULT([yes])
         DEAD_CODE_REMOVAL="-Wl,--gc-sections";
         AX_APPEND_COMPILE_FLAGS([-ffunction-sections -fdata-sections])],
@@ -668,7 +668,7 @@ if test "$DEAD_CODE_REMOVAL" = ""; then
     LDFLAGS="$LDFLAGS -Wl,-dead_strip"
     AC_MSG_CHECKING([whether ld supports -dead_strip])
     AC_LINK_IFELSE(
-        [AC_LANG_SOURCE([static char UnusedFunc() { return 5; } int main() { return 0;}])],
+        [AC_LANG_SOURCE([static char UnusedFunc() { return 5; } int main(void) { return 0;}])],
         [AC_MSG_RESULT([yes])
             DEAD_CODE_REMOVAL="-Wl,-dead_strip";],
         [AC_MSG_RESULT([no])

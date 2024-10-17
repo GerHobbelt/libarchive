@@ -28,7 +28,7 @@ MACRO (CHECK_TYPE_EXISTS _TYPE _HEADER _RESULT)
 
    SET(_CHECK_TYPE_EXISTS_SOURCE_CODE "
 ${_INCLUDE_FILES}
-int main()
+int main(void)
 {
    static ${_TYPE} tmp;
    if (sizeof(tmp))

@@ -789,7 +789,7 @@ ENDFOREACH (it)
 CHECK_C_SOURCE_COMPILES(
   "#define __EXTENSIONS__ 1
    ${_INCLUDE_FILES}
-   int main() { return 0;}"
+   int main(void) { return 0;}"
  SAFE_TO_DEFINE_EXTENSIONS)
 
 #
@@ -1085,7 +1085,7 @@ MACRO(CHECK_ICONV LIB TRY_ICONV_CONST)
     CHECK_C_SOURCE_COMPILES(
       "#include <stdlib.h>
        #include <iconv.h>
-       int main() {
+       int main(void) {
           ${TRY_ICONV_CONST} char *ccp;
           iconv_t cd = iconv_open(\"\", \"\");
           iconv(cd, &ccp, (size_t *)0, (char **)0, (size_t *)0);
@@ -2142,7 +2142,7 @@ CHECK_CRYPTO_WIN("MD5;SHA1;SHA256;SHA384;SHA512")
 SET(OLD_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
 SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -fvisibility=hidden -Werror")
 CHECK_C_SOURCE_COMPILES("void __attribute__((visibility(\"default\"))) foo(void);
-int main() { return 0; }" HAVE_VISIBILITY_ATTR)
+int main(void) { return 0; }" HAVE_VISIBILITY_ATTR)
 IF (HAVE_VISIBILITY_ATTR)
   SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
   ADD_DEFINITIONS(-D__LIBARCHIVE_ENABLE_VISIBILITY)
