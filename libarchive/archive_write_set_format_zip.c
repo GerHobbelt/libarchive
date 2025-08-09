@@ -1859,7 +1859,7 @@ archive_write_zip_finish_entry(struct archive_write *a)
 			ret = __archive_write_output(a, zip->buf, remainder);
 			if (ret != ARCHIVE_OK)
 			{
-				deflateEnd(&zip->stream.deflate);
+				zng_deflateEnd(&zip->stream.deflate);
 				return (ret);
 			}
 			zip->entry_compressed_written += remainder;

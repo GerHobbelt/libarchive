@@ -57,7 +57,8 @@
 #include <libxml/xmlversion.h>
 #elif HAVE_BSDXML_H
 #include <bsdxml.h>
-#elif HAVE_EXPAT_H
+#endif
+#if HAVE_EXPAT_H
 #include <expat.h>
 #endif
 #if HAVE_MBEDTLS_VERSION_H
@@ -243,9 +244,9 @@ archive_version_details(void)
 const char *
 archive_zlib_version(void)
 {
-#ifdef HAVE_ZLIB_NG_H && HAVE_LIBZ
-	return zlibVersion();
-#elif defined(HAVE_ZLIB_H) && HAVE_LIBZ
+#if defined(HAVE_ZLIB_NG_H) && defined(HAVE_LIBZ)
+	return zlibng_version();
+#elif defined(HAVE_ZLIB_H) && defined(HAVE_LIBZ)
 	return zlibVersion();
 #else
 	return NULL;

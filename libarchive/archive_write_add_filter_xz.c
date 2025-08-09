@@ -258,7 +258,7 @@ archive_compressor_xz_init_stream(struct archive_write_filter *f,
 		}
 
 		{
-#if __has_builtin(__builtin_clz)
+#if defined(__has_builtin) && __has_builtin(__builtin_clz)
 			int log2dic = 31 - __builtin_clz(dict_size);
 #elif defined(_MSC_VER)
 			unsigned long log2dic;
