@@ -12,6 +12,7 @@
 #include <io.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <share.h>
 
 #ifndef PRId64
 #define	PRId64 "I64"

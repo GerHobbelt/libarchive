@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2003-2024 Tim Kientzle
+ * Copyright (c) 2025 Tobias Stoeckmann
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,26 +24,41 @@
  */
 #include "test.h"
 
-DEFINE_TEST(test_read_filter_gzip_recursive)
+/*
+ * Read a pax formatted tar archive that contains an invalid attribute,
+ * because it does not end in a newline. Additionally, value is empty.
+ * The pax reader should stop and tar reader should continue with warning.
+ */
+DEFINE_TEST(test_read_pax_empty_val_no_nl)
 {
-	const char *name = "test_read_filter_gzip_recursive.gz";
+	char name[] = "test_read_pax_empty_val_no_nl.tar";
+	struct archive_entry *ae;
 	struct archive *a;
-
-	if (archive_zlib_version() == NULL) {
-		skipping("zlib not available");
-		return;
-	}
 
 	assert((a = archive_read_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
 	extract_reference_file(name);
-	assertEqualIntA(a, ARCHIVE_FATAL,
-	    archive_read_open_filename(a, name, 200));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_open_filename(a, name, 10240));
 
-	/* Verify that the filter detection worked. */
-	assertEqualInt(archive_filter_code(a, 0), ARCHIVE_FILTER_GZIP);
-	assertEqualString(archive_filter_name(a, 0), "gzip");
+	/* Read first entry. */
+	assertEqualIntA(a, ARCHIVE_WARN, archive_read_next_header(a, &ae));
+	assertEqualString("empty", archive_entry_pathname(ae));
+	assertEqualInt(1748163748, archive_entry_mtime(ae));
+	assertEqualInt(0, archive_entry_uid(ae));
+	assertEqualString("root", archive_entry_uname(ae));
+	assertEqualInt(0, archive_entry_gid(ae));
+	assertEqualString("root", archive_entry_gname(ae));
+	assertEqualInt(0100600, archive_entry_mode(ae));
+	assertEqualInt(archive_entry_is_encrypted(ae), 0);
+	assertEqualIntA(a, archive_read_has_encrypted_entries(a), ARCHIVE_READ_FORMAT_ENCRYPTION_UNSUPPORTED);
+
+	/* Verify the end-of-archive. */
+	assertEqualIntA(a, ARCHIVE_EOF, archive_read_next_header(a, &ae));
+
+	/* Verify that the format detection worked. */
+	assertEqualInt(archive_filter_code(a, 0), ARCHIVE_FILTER_NONE);
+	assertEqualInt(archive_format(a), ARCHIVE_FORMAT_TAR_PAX_INTERCHANGE);
 
 	assertEqualInt(ARCHIVE_OK, archive_read_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_read_free(a));

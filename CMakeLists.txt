@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.17 FATAL_ERROR)
 
 PROJECT(libarchive C)
 #
+# Include standard installation directories
+include(GNUInstallDirs)
+#
 SET(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/build/cmake")
 if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${libarchive_BINARY_DIR}/bin)
@@ -257,6 +260,10 @@ OPTION(ENABLE_INSTALL "Enable installing of libraries" ON)
 if (UNIX)
 	option(ENABLE_LIBNATSPEC "Enable use of libnatspec" ON)
 endif()
+
+IF(WIN32 AND MSVC)
+  OPTION(MSVC_USE_STATIC_CRT "Use static CRT" OFF)
+ENDIF()
 
 SET(POSIX_REGEX_LIB "AUTO" CACHE STRING "Choose what library should provide POSIX regular expression support")
 SET(ENABLE_SAFESEH "AUTO" CACHE STRING "Enable use of /SAFESEH linker flag (MSVC only)")
@@ -1261,7 +1268,7 @@ ELSE(LIBXML2_FOUND)
       # Check linkage as well; versions of mingw-w64 before v11.0.0
       # do not contain an import library for xmllite.
       cmake_push_check_state()
-      SET(CMAKE_REQUIRED_LIBRARIES "xmllite")
+      SET(CMAKE_REQUIRED_LIBRARIES "xmllite" "uuid")
       check_c_source_compiles("
       #include <initguid.h>
       #include <xmllite.h>
@@ -1272,7 +1279,7 @@ ELSE(LIBXML2_FOUND)
       cmake_pop_check_state()
       IF(HAVE_XMLLITE_H)
         SET(XMLLITE_FOUND TRUE)
-        LIST(APPEND ADDITIONAL_LIBS "xmllite")
+        LIST(APPEND ADDITIONAL_LIBS "xmllite" "uuid")
       ENDIF()
     ENDIF()
   ENDIF(EXPAT_FOUND)
@@ -1582,12 +1589,6 @@ CHECK_C_SOURCE_COMPILES(
 CHECK_C_SOURCE_COMPILES(
   "#include <sys/types.h>\n#include <sys/mount.h>\nint main(void) { struct statfs s; return sizeof(s);}"
   HAVE_STRUCT_STATFS)
-
-# Make sure we have the POSIX version of readdir_r, not the
-# older 2-argument version.
-CHECK_C_SOURCE_COMPILES(
-  "#include <dirent.h>\nint main() {DIR *d = opendir(\".\"); struct dirent e,*r; return readdir_r(d,&e,&r);}"
-  HAVE_READDIR_R)
 
 # dirfd can be either a function or a macro.
 CHECK_C_SOURCE_COMPILES(
