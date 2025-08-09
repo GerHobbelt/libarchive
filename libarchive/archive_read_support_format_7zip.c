@@ -85,6 +85,7 @@
 #define _7Z_ARM		0x03030501
 #define _7Z_ARMTHUMB	0x03030701
 #define _7Z_ARM64	0xa
+#define _7Z_RISCV	0xb
 #define _7Z_SPARC	0x03030805
 
 #define _7Z_ZSTD	0x4F71101 /* Copied from https://github.com/mcmilk/7-Zip-zstd.git */
@@ -437,6 +438,7 @@ static void	arm_Init(struct _7zip *);
 static size_t	arm_Convert(struct _7zip *, uint8_t *, size_t);
 static size_t	arm64_Convert(struct _7zip *, uint8_t *, size_t);
 static ssize_t		Bcj2_Decode(struct _7zip *, uint8_t *, size_t);
+static size_t	sparc_Convert(struct _7zip *, uint8_t *, size_t);
 
 
 int
@@ -772,7 +774,7 @@ archive_read_format_7zip_read_header(struct archive_read *a,
 		/* allocate for ",rdonly,hidden,system" */
 		fflags_text = malloc(22 * sizeof(*fflags_text));
 		if (fflags_text != NULL) {
-			ptr = fflags_text; 
+			ptr = fflags_text;
 			if (zip_entry->attr & FILE_ATTRIBUTE_READONLY) {
 				strcpy(ptr, ",rdonly");
 				ptr = ptr + 7;
@@ -1111,7 +1113,8 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 			if (coder2->codec != _7Z_X86 &&
 			    coder2->codec != _7Z_X86_BCJ2 &&
 			    coder2->codec != _7Z_ARM &&
-			    coder2->codec != _7Z_ARM64) {
+			    coder2->codec != _7Z_ARM64 &&
+			    coder2->codec != _7Z_SPARC) {
 				archive_set_error(&a->archive,
 				    ARCHIVE_ERRNO_MISC,
 				    "Unsupported filter %lx for %lx",
@@ -1223,6 +1226,12 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 #ifdef LZMA_FILTER_ARM64
 			case _7Z_ARM64:
 				filters[fi].id = LZMA_FILTER_ARM64;
+				fi++;
+				break;
+#endif
+#ifdef LZMA_FILTER_RISCV
+			case _7Z_RISCV:
+				filters[fi].id = LZMA_FILTER_RISCV;
 				fi++;
 				break;
 #endif
@@ -1398,6 +1407,7 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 	case _7Z_ARM:
 	case _7Z_ARMTHUMB:
 	case _7Z_ARM64:
+	case _7Z_RISCV:
 	case _7Z_SPARC:
 	case _7Z_DELTA:
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
@@ -1710,6 +1720,8 @@ decompress(struct archive_read *a, struct _7zip *zip,
 			*outbytes = arm_Convert(zip, buff, *outbytes);
 		} else if (zip->codec2 == _7Z_ARM64) {
 			*outbytes = arm64_Convert(zip, buff, *outbytes);
+		} else if (zip->codec2 == _7Z_SPARC) {
+			*outbytes = sparc_Convert(zip, buff, *outbytes);
 		}
 	}
 
@@ -4004,6 +4016,64 @@ arm64_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
 			buf[i+1] = (uint8_t)(instr >> 8);
 			buf[i+2] = (uint8_t)(instr >> 16);
 			buf[i+3] = (uint8_t)(instr >> 24);
+		}
+	}
+
+	zip->bcj_ip += (uint32_t)i;
+
+	return i;
+}
+
+static size_t
+sparc_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
+{
+	// This function was adapted from
+	// static size_t bcj_sparc(struct xz_dec_bcj *s, uint8_t *buf, size_t size)
+	// in https://git.tukaani.org/xz-embedded.git
+
+	/*
+	 * Branch/Call/Jump (BCJ) filter decoders
+	 *
+	 * Authors: Lasse Collin <lasse.collin@tukaani.org>
+	 *          Igor Pavlov <https://7-zip.org/>
+	 *
+	 * Copyright (C) The XZ Embedded authors and contributors
+	 *
+	 * Permission to use, copy, modify, and/or distribute this
+	 * software for any purpose with or without fee is hereby granted.
+	 *
+	 * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+	 * WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+	 * WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
+	 * THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
+	 * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+	 * LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+	 * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+	 * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+	 */
+
+	size_t i;
+	uint32_t instr;
+
+	size &= ~(size_t)3;
+
+	for (i = 0; i < size; i += 4) {
+		instr = (uint32_t)(buf[i] << 24)
+			| ((uint32_t)buf[i+1] << 16)
+			| ((uint32_t)buf[i+2] << 8)
+			| (uint32_t)buf[i+3];
+
+		if ((instr >> 22) == 0x100 || (instr >> 22) == 0x1FF) {
+			instr <<= 2;
+			instr -= zip->bcj_ip + (uint32_t)i;
+			instr >>= 2;
+			instr = ((uint32_t)0x40000000 - (instr & 0x400000))
+			        | 0x40000000 | (instr & 0x3FFFFF);
+
+			buf[i] = (uint8_t)(instr >> 24);
+			buf[i+1] = (uint8_t)(instr >> 16);
+			buf[i+2] = (uint8_t)(instr >> 8);
+			buf[i+3] = (uint8_t)instr;
 		}
 	}
 

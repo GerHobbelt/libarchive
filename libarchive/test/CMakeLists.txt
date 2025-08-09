@@ -55,6 +55,7 @@ IF(ENABLE_TEST)
     test_compat_bzip2.c
     test_compat_cpio.c
     test_compat_gtar.c
+    test_compat_gtar_large.c
     test_compat_gzip.c
     test_compat_lz4.c
     test_compat_lzip.c
@@ -288,6 +289,9 @@ IF(ENABLE_TEST)
     test_write_format_zip.c
     test_write_format_zip64_stream.c
     test_write_format_zip_compression_store.c
+    test_write_format_zip_compression_bzip2.c
+    test_write_format_zip_compression_lzmaxz.c
+    test_write_format_zip_compression_zstd.c
     test_write_format_zip_empty.c
     test_write_format_zip_empty_zip64.c
     test_write_format_zip_entry_size_unset.c
@@ -327,7 +331,9 @@ IF(ENABLE_TEST)
       NAME libarchive_${_testname}
       COMMAND libarchive_test -vv
                               -r ${CMAKE_CURRENT_SOURCE_DIR}
+                              -s
                               ${_testname})
+    SET_TESTS_PROPERTIES(libarchive_${_testname} PROPERTIES SKIP_RETURN_CODE 2)
   ENDMACRO (DEFINE_TEST _testname)
 
   INCLUDE(${CMAKE_CURRENT_BINARY_DIR}/list.h)

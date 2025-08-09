@@ -370,6 +370,8 @@ invalid_parameter_handler(const wchar_t * expression,
 static int dump_on_failure = 0;
 /* Default is to remove temp dirs and log data for successful tests. */
 static int keep_temp_files = 0;
+/* Default is to only return a failure code (1) if there were test failures. If enabled, exit with code 2 if there were no failures, but some tests were skipped. */
+static int fail_if_tests_skipped = 0;
 /* Default is to run the specified tests once and report errors. */
 static int until_failure = 0;
 /* Default is to just report pass/fail for each test. */
@@ -3532,7 +3534,7 @@ test_summarize(int failed, int skips_num)
 		fflush(stdout);
 		break;
 	case VERBOSITY_PASSFAIL:
-		printf(failed ? "FAIL\n" : skips_num ? "ok (S)\n" : "ok\n");
+		printf(failed ? "FAIL\n" : skips_num ? "skipped\n" : "ok\n");
 		break;
 	}
 
@@ -3678,7 +3680,8 @@ usage(const char *program)
 	printf("  -q  Quiet.\n");
 	printf("  -r <dir>   Path to dir containing reference files.\n");
 	printf("      Default: Current directory.\n");
-	printf("  -u  Keep running specifies tests until one fails.\n");
+	printf("  -s  Exit with code 2 if any tests were skipped.\n");
+	printf("  -u  Keep running specified tests until one fails.\n");
 	printf("  -v  Verbose.\n");
 	printf("Available tests:\n");
 	for (i = 0; i < limit; i++)
@@ -4075,6 +4078,9 @@ int main(int argc, const char** argv)
 			case 'r':
 				refdir = option_arg;
 				break;
+			case 's':
+				fail_if_tests_skipped = 1;
+				break;
 			case 'u':
 				until_failure++;
 				break;
@@ -4127,6 +4133,19 @@ int main(int argc, const char** argv)
 		strncat(testprg, testprogfile, testprg_len);
 		strncat(testprg, "\"", testprg_len);
 		testprog = testprg;
+	}
+
+	/* Sanity check: reject a relative path for refdir. */
+	if (refdir != NULL) {
+#if defined(_WIN32) && !defined(__CYGWIN__)
+		/* TODO: probably use PathIsRelative() from <shlwapi.h>. */
+#else
+		if (refdir[0] != '/') {
+			fprintf(stderr,
+			    "ERROR: Cannot use relative path for refdir\n");
+			exit(1);
+		}
+#endif
 	}
 #endif
 
@@ -4273,5 +4292,9 @@ finish:
 	assertChdir("..");
 	rmdir(tmpdir);
 
-	return (tests_failed ? 1 : 0);
+	if (tests_failed) return 1;
+
+	if (fail_if_tests_skipped == 1 && skips > 0) return 2;
+
+	return 0;
 }
