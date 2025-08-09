@@ -990,7 +990,7 @@ archive_acl_to_text_l(struct archive_acl *acl, ssize_t *text_len, int flags,
 
 	len = strlen(s);
 
-	if ((ssize_t)len > (length - 1))
+	if (len > length - 1)
 		__archive_errx(1, "Buffer overrun");
 
 	if (text_len != NULL)

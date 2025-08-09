@@ -85,6 +85,10 @@
 #include <membership.h>
 #endif
 
+#ifndef nitems
+#define nitems(arr) (sizeof(arr) / sizeof((arr)[0]))
+#endif
+
 /*
  *
  * Windows support routines
@@ -1244,20 +1248,14 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 		if (expected == NULL) {
 			failure_start(pathname, line, "Can't allocate memory");
 			failure_finish(NULL);
-			free(expected);
-			free(buff);
-			return (0);
+			goto cleanup;
 		}
 		for (i = 0; lines[i] != NULL; ++i) {
 			expected[i] = strdup(lines[i]);
 			if (expected[i] == NULL) {
 				failure_start(pathname, line, "Can't allocate memory");
 				failure_finish(NULL);
-				while (i > 0)
-					free(expected[--i]);
-				free(expected);
-				free(buff);
-				return (0);
+				goto cleanup;
 			}
 		}
 	}
@@ -1276,11 +1274,7 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 		if (actual == NULL) {
 			failure_start(pathname, line, "Can't allocate memory");
 			failure_finish(NULL);
-			for (i = 0; i < expected_count; ++i)
-				free(expected[i]);
-			free(expected);
-			free(buff);
-			return (0);
+			goto cleanup;
 		}
 		for (j = 0, p = buff; p < buff + buff_size;
 		    p += 1 + strlen(p)) {
@@ -1315,9 +1309,9 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 			++actual_failure;
 	}
 	if (expected_failure == 0 && actual_failure == 0) {
-		free(buff);
-		free(expected);
 		free(actual);
+		free(expected);
+		free(buff);
 		return (1);
 	}
 	failure_start(file, line, "File doesn't match: %s", pathname);
@@ -1325,6 +1319,7 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 		if (expected[i] != NULL) {
 			logprintf("  Expected but not present: %s\n", expected[i]);
 			free(expected[i]);
+			expected[i] = NULL;
 		}
 	}
 	for (j = 0; j < actual_count; ++j) {
@@ -1332,9 +1327,15 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 			logprintf("  Present but not expected: %s\n", actual[j]);
 	}
 	failure_finish(NULL);
-	free(buff);
-	free(expected);
+cleanup:
 	free(actual);
+	if (expected != NULL) {
+		for (i = 0; i < expected_count; ++i)
+			if (expected[i] != NULL)
+				free(expected[i]);
+		free(expected);
+	}
+	free(buff);
 	return (0);
 }
 
@@ -2969,7 +2970,6 @@ setTestAcl(const char *path)
 	acl_permset_t permset;
 	const uid_t uid = 1;
 	uuid_t uuid;
-	int i;
 	const acl_perm_t acl_perms[] = {
 		ACL_READ_DATA,
 		ACL_WRITE_DATA,
@@ -3011,7 +3011,7 @@ setTestAcl(const char *path)
 	failure("acl_get_permset() error: %s", strerror(errno));
 	if (assertEqualInt(r, 0) == 0)
 		goto testacl_free;
-	for (i = 0; i < (int)(sizeof(acl_perms) / sizeof(acl_perms[0])); i++) {
+	for (size_t i = 0; i < nitems(acl_perms); i++) {
 		r = acl_add_perm(permset, acl_perms[i]);
 		failure("acl_add_perm() error: %s", strerror(errno));
 		if (assertEqualInt(r, 0) == 0)
@@ -3661,7 +3661,7 @@ test_run(int i, const char *tmpdir)
 static void
 usage(const char *program)
 {
-	static const int limit = sizeof(tests) / sizeof(tests[0]);
+	static const int limit = nitems(tests);
 	int i;
 
 	printf("Usage: %s [options] <test> <test> ...\n", program);
@@ -3897,8 +3897,8 @@ get_test_set(int *test_set, int limit, const char *test)
 
 int main(int argc, const char** argv)
 {
-	static const int limit = sizeof(tests) / sizeof(tests[0]);
-	int test_set[limit];
+	static const int limit = nitems(tests);
+	int test_set[nitems(tests)];
 	int i = 0, j = 0, tests_run = 0, tests_failed = 0, option;
 	size_t testprogdir_len;
 	size_t tmplen;
@@ -4157,15 +4157,15 @@ int main(int argc, const char** argv)
 		strftime(tmpdir_timestamp, sizeof(tmpdir_timestamp),
 		    "%Y-%m-%dT%H.%M.%S", tmptr);
 		if (tmplen + 1 + strlen(progname) + 1 +
-		    strlen(tmpdir_timestamp) + 1 + 3 >
-		    sizeof(tmpdir)) {
+		    strlen(tmpdir_timestamp) + 1 + 3 >=
+		    nitems(tmpdir)) {
 			fprintf(stderr,
 			    "ERROR: Temp directory pathname too long\n");
 			exit(1);
 		}
 		snprintf(tmpdir, sizeof(tmpdir), "%.*s/%s.%s-%03d",
 		    (int)tmplen, tmp, progname, tmpdir_timestamp, i);
-		if (assertMakeDir(tmpdir,0755))
+		if (assertMakeDir(tmpdir, 0755))
 			break;
 		if (i >= 999) {
 			fprintf(stderr,
