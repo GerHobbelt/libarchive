@@ -684,6 +684,7 @@ append_archive(struct bsdtar *bsdtar, struct archive *a, struct archive *ina)
 			continue;
 		if (edit_pathname(bsdtar, in_entry))
 			continue;
+		edit_mtime(bsdtar, in_entry);
 		if (bsdtar->verbose > 1) {
 			safe_fprintf(stderr, "a ");
 			list_item_verbose(bsdtar, stderr, in_entry, bsdtar->verbose > 2);
@@ -909,6 +910,9 @@ write_hierarchy(struct bsdtar *bsdtar, struct archive *a, const char *path)
 		 */
 		if (edit_pathname(bsdtar, entry))
 			continue;
+
+		/* Rewrite the mtime. */
+		edit_mtime(bsdtar, entry);
 
 		/* Display entry as we process it. */
 		if (bsdtar->verbose > 1) {

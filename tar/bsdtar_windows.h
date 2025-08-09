@@ -44,4 +44,4 @@ int __tar_chdir(const char *);
 
 #endif
 
-#endif /* BSDTAR_WINDOWS_H */
+#endif /* !BSDTAR_WINDOWS_H */
