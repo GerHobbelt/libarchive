@@ -313,7 +313,11 @@ int assertion_non_empty_file(const char *, int, const char *);
 int assertion_set_nodump(const char *, int, const char *);
 int assertion_text_file_contents(const char *, int, const char *buff, const char *f);
 int assertion_umask(const char *, int, int);
+#if !defined(_WIN32) // suseconds_t ~ long ~ decltype(timeval::tv_nsec)
 int assertion_utimes(const char *, int, const char *, time_t, suseconds_t, time_t, suseconds_t);
+#else
+int assertion_utimes(const char*, int, const char*, time_t, long, time_t, long);
+#endif
 int assertion_version(const char*, int, const char *, const char *);
 
 void skipping_setup(const char *, int);

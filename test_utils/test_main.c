@@ -2095,9 +2095,15 @@ assertion_umask(const char *file, int line, int mask)
 }
 
 /* Set times, report failures. */
+#if !defined(_WIN32) // suseconds_t ~ long ~ decltype(timeval::tv_nsec)
 int
 assertion_utimes(const char *file, int line, const char *pathname,
     time_t at, suseconds_t at_nsec, time_t mt, suseconds_t mt_nsec)
+#else
+int
+assertion_utimes(const char* file, int line, const char* pathname,
+	time_t at, long at_nsec, time_t mt, long mt_nsec)
+#endif
 {
 	int r;
 
