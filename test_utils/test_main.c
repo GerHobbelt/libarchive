@@ -4104,6 +4104,9 @@ int main(int argc, const char** argv)
 	if (testprogfile == NULL)
 	{
 		tmp2_len = strlen(testprogdir) + 1 + strlen(PROGRAM) + 1;
+#if defined(_WIN32) && !defined(__CYGWIN__)
+		tmp2_len += 4;
+#endif
 		if ((tmp2 = malloc(tmp2_len)) == NULL)
 		{
 			fprintf(stderr, "ERROR: Out of memory.");
@@ -4112,6 +4115,9 @@ int main(int argc, const char** argv)
 		strncpy(tmp2, testprogdir, tmp2_len);
 		strncat(tmp2, "/", tmp2_len);
 		strncat(tmp2, PROGRAM, tmp2_len);
+#if defined(_WIN32) && !defined(__CYGWIN__)
+		strncat(tmp2, ".exe", tmp2_len);
+#endif
 		testprogfile = tmp2;
 	}
 
