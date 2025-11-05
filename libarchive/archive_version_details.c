@@ -384,7 +384,7 @@ archive_openssl_version(void)
 #define OPENSSL_MAJOR (OPENSSL_VERSION_NUMBER >> 28)
 #define OPENSSL_MINOR ((OPENSSL_VERSION_NUMBER >> 20) & 0xFF)
 	static char openssl_version[6];
-	snprintf(openssl_version, 6, "%ld.%ld", OPENSSL_MAJOR, OPENSSL_MINOR);
+	snprintf(openssl_version, 6, "%ld.%ld", (long)OPENSSL_MAJOR, (long)OPENSSL_MINOR);
 	return openssl_version;
 #undef OPENSSL_MAJOR
 #undef OPENSSL_MINOR
