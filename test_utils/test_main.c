@@ -3687,10 +3687,18 @@ test_run(int i, const char *tmpdir)
  */
 
 static void
-usage(const char *program)
+list_tests(void)
 {
 	static const int limit = nitems(tests);
 	int i;
+
+	for (i = 0; i < limit; i++)
+		printf("  %d: %s\n", i, tests[i].name);
+}
+
+static void
+usage(const char *program)
+{
 
 	printf("Usage: %s [options] <test> <test> ...\n", program);
 	printf("Default is to run all tests.\n");
@@ -3699,6 +3707,8 @@ usage(const char *program)
 	printf("  -d  Dump core after any failure, for debugging.\n");
 	printf("  -k  Keep all temp files.\n");
 	printf("      Default: temp files for successful tests deleted.\n");
+	printf("  -l  List available tests and exit, ignoring all other.\n");
+	printf("      options and arguments.\n");
 #ifdef PROGRAM
 	printf("  -p <path>  Path to executable to be tested.\n");
 	printf("      Default: path taken from " ENVBASE " environment variable.\n");
@@ -3710,8 +3720,7 @@ usage(const char *program)
 	printf("  -u  Keep running specified tests until one fails.\n");
 	printf("  -v  Verbose.\n");
 	printf("Available tests:\n");
-	for (i = 0; i < limit; i++)
-		printf("  %d: %s\n", i, tests[i].name);
+	list_tests();
 	exit(1);
 }
 
@@ -4088,6 +4097,10 @@ int main(int argc, const char** argv)
 				break;
 			case 'k':
 				keep_temp_files = 1;
+				break;
+			case 'l':
+				list_tests();
+				exit(0);
 				break;
 			case 'p':
 #ifdef PROGRAM
