@@ -454,8 +454,11 @@ archive_compressor_zstd_close(struct archive_write_filter *f)
 		    data->total_out % f->bytes_per_block;
 		if (padsize < ZSTD_SKIPHDRLEN)
 			padsize += f->bytes_per_block;
-		archive_le32enc(data->out.dst + 0, ZSTD_MAGIC_SKIPPABLE_START);
-		archive_le32enc(data->out.dst + 4, padsize - ZSTD_SKIPHDRLEN);
+		{
+			uint8_t *dst = (uint8_t *)data->out.dst;
+			archive_le32enc(dst + 0, ZSTD_MAGIC_SKIPPABLE_START);
+			archive_le32enc(dst + 4, padsize - ZSTD_SKIPHDRLEN);
+		}
 		ret = __archive_write_filter(f->next_filter, data->out.dst, ZSTD_SKIPHDRLEN);
 		if (ret != ARCHIVE_OK)
 			break;
