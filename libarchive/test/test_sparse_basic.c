@@ -108,7 +108,7 @@ is_sparse_supported(const char *path)
 		root[3] = '\0';
 	else
 		return (0);
-	assertEqualInt((r = GetVolumeInformation(root, vol,
+	assertEqualInt((r = GetVolumeInformationA(root, vol,
 	    sizeof(vol), NULL, NULL, &flags, sys, sizeof(sys))), 1);
 	return (r != 0 && (flags & FILE_SUPPORTS_SPARSE_FILES) != 0);
 }
