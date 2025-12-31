@@ -377,7 +377,7 @@ AC_CHECK_HEADERS([time.h unistd.h utime.h wchar.h wctype.h])
 AC_CHECK_TYPE([suseconds_t])
 AC_CHECK_HEADERS([windows.h])
 # check windows.h first; the other headers require it.
-AC_CHECK_HEADERS([wincrypt.h winioctl.h],[],[],
+AC_CHECK_HEADERS([winioctl.h],[],[],
 [[#ifdef HAVE_WINDOWS_H
 # include <windows.h>
 #endif
@@ -826,12 +826,15 @@ AC_CHECK_FUNCS([closefrom close_range ctime_r])
 AC_CHECK_FUNCS([fchdir fchflags fchmod fchown fcntl fdopendir fnmatch fork])
 AC_CHECK_FUNCS([fstat fstatat fstatfs fstatvfs ftruncate])
 AC_CHECK_FUNCS([futimens futimes futimesat])
-AC_CHECK_FUNCS([geteuid getline getpid getgrgid_r getgrnam_r])
-AC_CHECK_FUNCS([getpwnam_r getpwuid_r getvfsbyname gmtime_r])
+AC_CHECK_FUNCS([getegid geteuid getline getpid getresgid getresuid])
+AC_CHECK_FUNCS([getgrgid_r getgrnam_r getpwnam_r getpwuid_r])
+AC_CHECK_FUNCS([getvfsbyname gmtime_r])
+AC_CHECK_FUNCS([issetugid])
 AC_CHECK_FUNCS([lchflags lchmod lchown link linkat localtime_r lstat lutimes])
 AC_CHECK_FUNCS([mbrtowc memmove memset])
 AC_CHECK_FUNCS([mkdir mkfifo mknod mkstemp])
-AC_CHECK_FUNCS([nl_langinfo openat pipe poll posix_spawnp readlink readlinkat])
+AC_CHECK_FUNCS([nl_langinfo openat pipe poll posix_spawn posix_spawnp])
+AC_CHECK_FUNCS([readlink readlinkat])
 AC_CHECK_FUNCS([readpassphrase])
 AC_CHECK_FUNCS([select setenv setlocale sigaction statfs statvfs])
 AC_CHECK_FUNCS([strchr strdup strerror strncpy_s strnlen strrchr symlink])

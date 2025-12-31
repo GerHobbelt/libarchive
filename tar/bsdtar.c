@@ -55,7 +55,7 @@
 #endif
 
 #include "bsdtar.h"
-#include "err.h"
+#include "lafe_err.h"
 
 #if defined(BUILD_MONOLITHIC)
 #include "monolithic_examples.h"
