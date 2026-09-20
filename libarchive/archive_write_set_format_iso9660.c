@@ -1383,7 +1383,7 @@ iso9660_options(struct archive_write *a, const char *key, const char *value)
 			archive_set_error(&a->archive,
 			    ARCHIVE_ERRNO_MISC,
 			    "Option ``%s'' "
-			    "is not supported on this platform.", key);
+			    "is not supported on this platform", key);
 			return (ARCHIVE_FATAL);
 #endif
 		}
@@ -1505,7 +1505,7 @@ iso9660_options(struct archive_write *a, const char *key, const char *value)
 				archive_set_error(&a->archive,
 				    ARCHIVE_ERRNO_MISC,
 				    "``zisofs'' "
-				    "is not supported on this platform.");
+				    "is not supported on this platform");
 				return (ARCHIVE_FATAL);
 #endif
 			}
@@ -1543,7 +1543,7 @@ iso9660_write_header(struct archive_write *a, struct archive_entry *entry)
 	if (archive_entry_filetype(entry) == AE_IFLNK
 	    && iso9660->opt.rr == OPT_RR_DISABLED) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-		    "Ignore symlink file.");
+		    "Ignore symlink file");
 		iso9660->cur_file = NULL;
 		return (ARCHIVE_WARN);
 	}
@@ -1553,7 +1553,7 @@ iso9660_write_header(struct archive_write *a, struct archive_entry *entry)
 			archive_set_error(&a->archive,
 			    ARCHIVE_ERRNO_MISC,
 			    "Ignore over %lld bytes file. "
-			    "This file too large.",
+			    "This file too large",
 			    MULTI_EXTENT_SIZE);
 				iso9660->cur_file = NULL;
 			return (ARCHIVE_WARN);
@@ -2107,7 +2107,7 @@ iso9660_close(struct archive_write *a)
 
 	if (iso9660->directories_too_deep != NULL) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-		    "%s: Directories too deep.",
+		    "%s: Directories too deep",
 		    archive_entry_pathname(
 			iso9660->directories_too_deep->file->entry));
 		return (ARCHIVE_WARN);
@@ -3803,7 +3803,7 @@ set_file_identifier(unsigned char *bp, int from, int to, enum vdc vdc,
 		isoent = isoent_find_entry(vdd->rootent, ids);
 		if (isoent == NULL) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-			    "Not Found %s `%s'.",
+			    "Not Found %s `%s'",
 			    label, ids);
 			return (ARCHIVE_FATAL);
 		}
@@ -7084,7 +7084,7 @@ isoent_make_path_table(struct archive_write *a)
 		 * See also ISO9660 Standard 9.4.
 		 */
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-		    "Too many directories(%d) over 65535.", dir_number);
+		    "Too many directories(%d) over 65535", dir_number);
 		return (ARCHIVE_FATAL);
 	}
 
@@ -7207,7 +7207,7 @@ isoent_create_boot_catalog(struct archive_write *a, struct isoent *rootent)
 		else {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Boot image file(``%s'') size is too big "
-			    "for fd type.",
+			    "for fd type",
 			    iso9660->el_torito.boot_filename.s);
 			return (ARCHIVE_FATAL);
 		}
