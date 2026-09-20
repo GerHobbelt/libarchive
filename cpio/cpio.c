@@ -646,7 +646,7 @@ mode_out(struct cpio *cpio)
 		int64_t blocks =
 			(archive_filter_bytes(cpio->archive, 0) + 511)
 			/ 512;
-		fprintf(stderr, "%lu %s\n", (unsigned long)blocks,
+		fprintf(stderr, "%lld %s\n", (long long)blocks,
 		    blocks == 1 ? "block" : "blocks");
 	}
 	archive_write_free(cpio->archive);
@@ -1048,7 +1048,7 @@ mode_in(struct cpio *cpio)
 	if (!cpio->quiet) {
 		int64_t blocks = (archive_filter_bytes(a, 0) + 511)
 			      / 512;
-		fprintf(stderr, "%lu %s\n", (unsigned long)blocks,
+		fprintf(stderr, "%lld %s\n", (long long)blocks,
 		    blocks == 1 ? "block" : "blocks");
 	}
 	archive_read_free(a);
@@ -1133,7 +1133,7 @@ mode_list(struct cpio *cpio)
 	if (!cpio->quiet) {
 		int64_t blocks = (archive_filter_bytes(a, 0) + 511)
 			      / 512;
-		fprintf(stderr, "%lu %s\n", (unsigned long)blocks,
+		fprintf(stderr, "%lld %s\n", (long long)blocks,
 		    blocks == 1 ? "block" : "blocks");
 	}
 	archive_read_free(a);
