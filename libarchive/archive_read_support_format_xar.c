@@ -1082,16 +1082,14 @@ atou64(const char *p, size_t char_cnt, int base, uint64_t *val)
 	uint64_t l;
 
 	l = 0;
-	if (char_cnt > 0) {
-		int digit;
+	while (char_cnt-- > 0) {
+		int digit = *p++ - '0';
 
-		digit = *p - '0';
-		while (digit >= 0 && digit < base && char_cnt-- > 0) {
-			if (archive_ckd_mul_u64(&l, l, base) ||
-			    archive_ckd_add_u64(&l, l, digit))
-				return (ARCHIVE_FATAL);
-			digit = *++p - '0';
-		}
+		if (digit < 0 || digit >= base)
+			break;
+		if (archive_ckd_mul_u64(&l, l, base) ||
+		    archive_ckd_add_u64(&l, l, digit))
+			return (ARCHIVE_FATAL);
 	}
 
 	*val = l;
@@ -2636,7 +2634,7 @@ strappend_base64(struct xar *xar,
 	len = 0;
 	out = buff;
 	b = (const unsigned char *)s;
-	while (l > 0) {
+	while (l > 1) {
 		int n = 0;
 
 		if (base64[b[0]] < 0 || base64[b[1]] < 0)

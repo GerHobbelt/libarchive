@@ -831,7 +831,7 @@ AC_CHECK_FUNCS([fstat fstatat fstatfs fstatvfs ftruncate])
 AC_CHECK_FUNCS([futimens futimes futimesat])
 AC_CHECK_FUNCS([getegid geteuid getline getpid getresgid getresuid])
 AC_CHECK_FUNCS([getgrgid_r getgrnam_r getpwnam_r getpwuid_r])
-AC_CHECK_FUNCS([getvfsbyname gmtime_r])
+AC_CHECK_FUNCS([gettimeofday getvfsbyname gmtime_r])
 AC_CHECK_FUNCS([issetugid])
 AC_CHECK_FUNCS([lchflags lchmod lchown link linkat localtime_r lstat lutimes])
 AC_CHECK_FUNCS([mbrtowc memmove memset])
@@ -1378,9 +1378,8 @@ AC_SUBST(LIBSREQUIRED)
 
 # Probe libmd AFTER OpenSSL/libcrypto.
 # The two are incompatible and OpenSSL is more complete.
-AC_CHECK_HEADERS([md5.h ripemd.h sha.h sha256.h sha512.h])
 saved_LIBS=$LIBS
-AC_CHECK_LIB(md,MD5Init)
+AC_CHECK_LIB(md, MD5Init)
 CRYPTO_CHECK(MD5, LIBMD, md5)
 CRYPTO_CHECK(RMD160, LIBMD, rmd160)
 CRYPTO_CHECK(SHA1, LIBMD, sha1)

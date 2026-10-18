@@ -229,8 +229,6 @@ struct rar_program_code
 {
   uint8_t *staticdata;
   uint32_t staticdatalen;
-  uint8_t *globalbackup;
-  uint32_t globalbackuplen;
   uint64_t fingerprint;
   uint32_t usagecount;
   uint32_t oldfilterlength;
@@ -3608,7 +3606,6 @@ delete_program_code(struct rar_program_code *prog)
   {
     struct rar_program_code *next = prog->next;
     free(prog->staticdata);
-    free(prog->globalbackup);
     free(prog);
     prog = next;
   }
