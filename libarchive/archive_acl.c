@@ -545,8 +545,8 @@ static size_t
 archive_acl_text_len(struct archive_acl *acl, int want_type, int flags,
     int wide, struct archive *a, struct archive_string_conv *sc) {
 	struct archive_acl_entry *ap;
-	const char *name;
-	const wchar_t *wname;
+	const char *name = NULL;
+	const wchar_t *wname = NULL;
 	int count, idlen, tmp, r;
 	size_t length;
 	size_t len;
