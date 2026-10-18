@@ -203,7 +203,8 @@ static int	archive_read_format_cpio_read_data(struct archive_read *,
 static int	archive_read_format_cpio_read_header(struct archive_read *,
 		    struct archive_entry *);
 static int	archive_read_format_cpio_skip(struct archive_read *);
-static int64_t	be32dec(const unsigned char *);
+static int64_t	cpio_be32dec(const unsigned char *);
+static int64_t	cpio_le32dec(const unsigned char *);
 static int	find_odc_header(struct archive_read *);
 static int	find_newc_header(struct archive_read *);
 static int	header_bin_be(struct archive_read *, struct cpio *,
@@ -218,7 +219,6 @@ static int	header_afiol(struct archive_read *, struct cpio *,
 		    struct archive_entry *, size_t *, size_t *);
 static int	is_octal(const char *, size_t);
 static int	is_hex(const char *, size_t);
-static int64_t	le32dec(const unsigned char *);
 static int	record_hardlink(struct archive_read *a,
 		    struct cpio *cpio, struct archive_entry *entry);
 
@@ -895,7 +895,8 @@ header_afiol(struct archive_read *a, struct cpio *cpio,
 
 	t = atol16(header + afiol_filesize_offset, afiol_filesize_size);
 	if (t < 0) {
-		archive_set_error(&a->archive, 0, "Nonsensical file size");
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
+		    "Nonsensical file size");
 		return (ARCHIVE_FATAL);
 	}
 	cpio->entry_bytes_remaining = t;
@@ -919,7 +920,7 @@ header_bin_le(struct archive_read *a, struct cpio *cpio,
 	/* Read fixed-size portion of header. */
 	h = __archive_read_ahead(a, bin_header_size, NULL);
 	if (h == NULL) {
-	    archive_set_error(&a->archive, 0,
+	    archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
 		"End of file trying to read next cpio header");
 	    return (ARCHIVE_FATAL);
 	}
@@ -940,11 +941,11 @@ header_bin_le(struct archive_read *a, struct cpio *cpio,
 	archive_entry_set_gid(entry, archive_le16dec(header + bin_gid_offset));
 	archive_entry_set_nlink(entry, archive_le16dec(header + bin_nlink_offset));
 	archive_entry_set_rdev(entry, archive_le16dec(header + bin_rdev_offset));
-	archive_entry_set_mtime(entry, le32dec(header + bin_mtime_offset), 0);
+	archive_entry_set_mtime(entry, cpio_le32dec(header + bin_mtime_offset), 0);
 	*namelength = archive_le16dec(header + bin_namesize_offset);
 	*name_pad = *namelength & 1; /* Pad to even. */
 
-	cpio->entry_bytes_remaining = le32dec(header + bin_filesize_offset);
+	cpio->entry_bytes_remaining = cpio_le32dec(header + bin_filesize_offset);
 	archive_entry_set_size(entry, cpio->entry_bytes_remaining);
 	cpio->entry_padding = cpio->entry_bytes_remaining & 1; /* Pad to even. */
 	__archive_read_consume(a, bin_header_size);
@@ -964,7 +965,7 @@ header_bin_be(struct archive_read *a, struct cpio *cpio,
 	/* Read fixed-size portion of header. */
 	h = __archive_read_ahead(a, bin_header_size, NULL);
 	if (h == NULL) {
-	    archive_set_error(&a->archive, 0,
+	    archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
 		"End of file trying to read next cpio header");
 	    return (ARCHIVE_FATAL);
 	}
@@ -985,11 +986,11 @@ header_bin_be(struct archive_read *a, struct cpio *cpio,
 	archive_entry_set_gid(entry, archive_be16dec(header + bin_gid_offset));
 	archive_entry_set_nlink(entry, archive_be16dec(header + bin_nlink_offset));
 	archive_entry_set_rdev(entry, archive_be16dec(header + bin_rdev_offset));
-	archive_entry_set_mtime(entry, be32dec(header + bin_mtime_offset), 0);
+	archive_entry_set_mtime(entry, cpio_be32dec(header + bin_mtime_offset), 0);
 	*namelength = archive_be16dec(header + bin_namesize_offset);
 	*name_pad = *namelength & 1; /* Pad to even. */
 
-	cpio->entry_bytes_remaining = be32dec(header + bin_filesize_offset);
+	cpio->entry_bytes_remaining = cpio_be32dec(header + bin_filesize_offset);
 	archive_entry_set_size(entry, cpio->entry_bytes_remaining);
 	cpio->entry_padding = cpio->entry_bytes_remaining & 1; /* Pad to even. */
 	    __archive_read_consume(a, bin_header_size);
@@ -1016,13 +1017,13 @@ archive_read_format_cpio_cleanup(struct archive_read *a)
 }
 
 static int64_t
-le32dec(const unsigned char *p)
+cpio_le32dec(const unsigned char *p)
 {
 	return ((int64_t)archive_le16dec(p) << 16) | archive_le16dec(p + 2);
 }
 
 static int64_t
-be32dec(const unsigned char *p)
+cpio_be32dec(const unsigned char *p)
 {
 	return ((int64_t)archive_be16dec(p) << 16) | archive_be16dec(p + 2);
 }

@@ -1175,16 +1175,18 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/README
 
 #
-# Common code for libarchive frontends (cpio, tar)
+# Common code for libarchive frontends (cat, cpio, tar, unzip)
 #
 noinst_HEADERS+= \
 	libarchive_fe/lafe_err.h \
+	libarchive_fe/lafe_fnmatch.h \
 	libarchive_fe/lafe_getline.h \
 	libarchive_fe/lafe_platform.h \
 	libarchive_fe/line_reader.h \
 	libarchive_fe/passphrase.h
 libarchive_fe_la_SOURCES= \
 	libarchive_fe/lafe_err.c \
+	libarchive_fe/lafe_fnmatch.c \
 	libarchive_fe/lafe_getline.c \
 	libarchive_fe/line_reader.c \
 	libarchive_fe/passphrase.c
@@ -1710,6 +1712,7 @@ bsdunzip_test_SOURCES= \
 	unzip/test/test_0.c \
 	unzip/test/test_basic.c \
 	unzip/test/test_doubledash.c \
+	unzip/test/test_f.c \
 	unzip/test/test_glob.c \
 	unzip/test/test_not_exist.c \
 	unzip/test/test_singlefile.c \
@@ -1721,8 +1724,10 @@ bsdunzip_test_SOURCES= \
 	unzip/test/test_n.c \
 	unzip/test/test_o.c \
 	unzip/test/test_q.c \
+	unzip/test/test_symlink.c \
 	unzip/test/test_t.c \
 	unzip/test/test_t_bad.c \
+	unzip/test/test_u.c \
 	unzip/test/test_version.c \
 	unzip/test/test_x.c \
 	unzip/test/test_Z1.c \
@@ -1753,7 +1758,13 @@ bsdunzip_test_EXTRA_DIST= \
 	unzip/test/list.h \
 	unzip/test/test_basic.zip.uu \
 	unzip/test/test_encrypted.zip.uu \
+	unzip/test/test_f_new.zip.uu \
+	unzip/test/test_f_old.zip.uu \
 	unzip/test/test_singlefile.zip.uu \
+	unzip/test/test_symlink_1.zip.uu \
+	unzip/test/test_symlink_2.zip.uu \
 	unzip/test/test_t_bad.zip.uu \
+	unzip/test/test_u_new.zip.uu \
+	unzip/test/test_u_old.zip.uu \
 	unzip/test/test_I.zip.uu \
 	unzip/test/CMakeLists.txt
