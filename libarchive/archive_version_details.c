@@ -179,7 +179,7 @@ archive_version_details(void)
 	const char *libiconv = archive_libiconv_version();
 	const char *libacl = archive_libacl_version();
 	const char *librichacl = archive_librichacl_version();
-	const char *libattr = archive_libacl_version();
+	const char *libattr = archive_libattr_version();
 
 	if (!init) {
 		archive_string_init(&str);
@@ -233,6 +233,7 @@ archive_version_details(void)
 			archive_strcat(&str, " libiconv/");
 			archive_strcat(&str, libiconv);
 		}
+		init = 1;
 	}
 	return str.s;
 }
