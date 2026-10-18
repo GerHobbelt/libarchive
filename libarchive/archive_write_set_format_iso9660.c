@@ -1172,6 +1172,7 @@ archive_write_set_format_iso9660(struct archive *_a)
 	iso9660->cur_dirent = iso9660->primary.rootent;
 	archive_string_init(&(iso9660->cur_dirstr));
 	if (archive_string_ensure(&(iso9660->cur_dirstr), 1) == NULL) {
+		free(iso9660->cur_dirent);
 		free(iso9660);
 		archive_set_error(&a->archive, ENOMEM,
 		    "Can't allocate memory");
@@ -6768,7 +6769,12 @@ isoent_rr_move_dir(struct archive_write *a, struct isoent **rr_moved,
 	/*
 	 * The mvent becomes a child of the rr_moved entry.
 	 */
-	isoent_add_child_tail(rrmoved, mvent);
+	if (!isoent_add_child_tail(rrmoved, mvent)) {
+		_isoent_free(mvent);
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Unable to insert rr_moved entry");
+		return (ARCHIVE_FATAL);
+	}
 	archive_entry_set_nlink(rrmoved->file->entry,
 	    archive_entry_nlink(rrmoved->file->entry) + 1);
 	/*
