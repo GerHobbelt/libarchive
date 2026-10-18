@@ -44,6 +44,7 @@
 
 #include "archive.h"
 #include "archive_endian.h"
+#include "archive_integer.h"
 #include "archive_private.h"
 #include "archive_read_private.h"
 #include "archive_xxhash.h"
@@ -175,6 +176,7 @@ lz4_reader_bid(struct archive_read_filter_bidder *self,
 	magic_number = archive_le32dec(buffer);
 
 	while ((magic_number & LZ4_SKIPPABLE_MASK) == LZ4_SKIPPABLE_START) {
+		size_t min;
 		uint32_t frame_data_size;
 
 		/* Skip over the magic number */
@@ -194,24 +196,24 @@ lz4_reader_bid(struct archive_read_filter_bidder *self,
 		offset_in_buffer += 4;
 
 		/* Skip over the value stored there. */
-		if (frame_data_size > SIZE_MAX - offset_in_buffer)
+		if (archive_ckd_add_size(&offset_in_buffer,
+		    offset_in_buffer, frame_data_size))
 			return (0);
-		offset_in_buffer += frame_data_size;
 
 		/*
 		 * There should be at least one more frame
 		 * if this is LZ4 data.
 		 */
-		if (min_lz4_frame_size > SIZE_MAX - offset_in_buffer)
+		if (archive_ckd_add_size(&min,
+		    offset_in_buffer, min_lz4_frame_size))
 			return (0);
 		/* TODO: should this be >= ? */
-		if (offset_in_buffer + min_lz4_frame_size > (size_t)avail) {
-			if (offset_in_buffer + min_lz4_frame_size >
-			    max_lookahead)
+		if (min > (size_t)avail) {
+			if (min > max_lookahead)
 				return (0); 
 
 			buffer = __archive_read_filter_ahead(filter,
-			    offset_in_buffer + min_lz4_frame_size, &avail);
+			    min, &avail);
 			if (buffer == NULL)
 				return (0); 
 		}
@@ -327,13 +329,15 @@ lz4_allocate_out_block(struct archive_read_filter *self)
 		out_block_size += 64 * 1024;
 	if (state->out_block_size < out_block_size) {
 		free(state->out_block);
+		state->out_block = NULL;
 		out_block = malloc(out_block_size);
-		state->out_block_size = out_block_size;
 		if (out_block == NULL) {
+			state->out_block_size = 0;
 			archive_set_error(&self->archive->archive, ENOMEM,
 			    "Can't allocate data for lz4 decompression");
 			return (ARCHIVE_FATAL);
 		}
+		state->out_block_size = out_block_size;
 		state->out_block = out_block;
 	}
 	if (!state->flags.block_independence)
@@ -350,13 +354,15 @@ lz4_allocate_out_block_for_legacy(struct archive_read_filter *self)
 
 	if (state->out_block_size < out_block_size) {
 		free(state->out_block);
+		state->out_block = NULL;
 		out_block = malloc(out_block_size);
-		state->out_block_size = out_block_size;
 		if (out_block == NULL) {
+			state->out_block_size = 0;
 			archive_set_error(&self->archive->archive, ENOMEM,
 			    "Can't allocate data for lz4 decompression");
 			return (ARCHIVE_FATAL);
 		}
+		state->out_block_size = out_block_size;
 		state->out_block = out_block;
 	}
 	return (ARCHIVE_OK);
@@ -562,7 +568,6 @@ lz4_filter_read_data_block(struct archive_read_filter *self, const void **p)
 	struct private_data *state = (struct private_data *)self->data;
 	ssize_t compressed_size;
 	const char *read_buf;
-	ssize_t bytes_remaining;
 	int checksum_size;
 	ssize_t uncompressed_size;
 	size_t prefix64k;
@@ -570,8 +575,7 @@ lz4_filter_read_data_block(struct archive_read_filter *self, const void **p)
 	*p = NULL;
 
 	/* Make sure we have 4 bytes for a block size. */
-	read_buf = __archive_read_filter_ahead(self->upstream, 4,
-	    &bytes_remaining);
+	read_buf = __archive_read_filter_ahead(self->upstream, 4, NULL);
 	if (read_buf == NULL)
 		goto truncated_error;
 	compressed_size = archive_le32dec(read_buf);
@@ -597,7 +601,7 @@ lz4_filter_read_data_block(struct archive_read_filter *self, const void **p)
 	  a huge buffer used for decoded data.
 	*/
 	read_buf = __archive_read_filter_ahead(self->upstream,
-	    4 + compressed_size + checksum_size, &bytes_remaining);
+	    4 + compressed_size + checksum_size, NULL);
 	if (read_buf == NULL)
 		goto truncated_error;
 
@@ -705,7 +709,6 @@ lz4_filter_read_default_stream(struct archive_read_filter *self, const void **p)
 {
 	struct private_data *state = (struct private_data *)self->data;
 	const char *read_buf;
-	ssize_t bytes_remaining;
 	ssize_t ret;
 
 	if (state->stage == SELECT_STREAM) {
@@ -729,7 +732,7 @@ lz4_filter_read_default_stream(struct archive_read_filter *self, const void **p)
 			unsigned int checksum;
 			unsigned int checksum_stream;
 			read_buf = __archive_read_filter_ahead(self->upstream,
-			    4, &bytes_remaining);
+			    4, NULL);
 			if (read_buf == NULL) {
 				archive_set_error(&self->archive->archive,
 				    ARCHIVE_ERRNO_MISC, "truncated lz4 input");

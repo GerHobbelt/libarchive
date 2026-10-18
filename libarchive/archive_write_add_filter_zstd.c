@@ -74,7 +74,6 @@ struct private_data {
 	size_t		 cur_frame;
 	size_t		 cur_frame_in;
 	size_t		 cur_frame_out;
-	size_t		 total_in;
 	size_t		 total_out;
 	ZSTD_CStream	*cstream;
 	ZSTD_outBuffer	 out;
@@ -542,7 +541,6 @@ drive_compressor(struct archive_write_filter *f,
 			data->state = running;
 			break;
 		}
-		data->total_in += in.pos - ipos;
 		data->cur_frame_in += in.pos - ipos;
 		data->total_out += data->out.pos - opos;
 		data->cur_frame_out += data->out.pos - opos;

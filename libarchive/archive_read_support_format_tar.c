@@ -42,6 +42,7 @@
 #include "archive_acl_private.h" /* For ACL parsing routines. */
 #include "archive_entry.h"
 #include "archive_entry_locale.h"
+#include "archive_integer.h"
 #include "archive_private.h"
 #include "archive_read_private.h"
 
@@ -615,16 +616,16 @@ archive_read_format_tar_read_header(struct archive_read *a,
 		 * directory: This is needed for certain old tar
 		 * variants and even for some broken newer ones.
 		 */
-		if ((wp = archive_entry_pathname_w(entry)) != NULL) {
-			l = wcslen(wp);
-			if (l > 0 && wp[l - 1] == L'/') {
+		if ((p = archive_entry_pathname(entry)) != NULL) {
+			l = strlen(p);
+			if (l > 0 && p[l - 1] == '/') {
 				archive_entry_set_filetype(entry, AE_IFDIR);
 				tar->entry_bytes_remaining = 0;
 				tar->entry_padding = 0;
 			}
-		} else if ((p = archive_entry_pathname(entry)) != NULL) {
-			l = strlen(p);
-			if (l > 0 && p[l - 1] == '/') {
+		} else if ((wp = archive_entry_pathname_w(entry)) != NULL) {
+			l = wcslen(wp);
+			if (l > 0 && wp[l - 1] == L'/') {
 				archive_entry_set_filetype(entry, AE_IFDIR);
 				tar->entry_bytes_remaining = 0;
 				tar->entry_padding = 0;
@@ -1816,32 +1817,42 @@ header_ustar(struct archive_read *a, struct tar *tar,
     struct archive_entry *entry, const void *h)
 {
 	const struct archive_entry_header_ustar	*header;
-	struct archive_string as;
 	int err = ARCHIVE_OK, r;
 
 	header = (const struct archive_entry_header_ustar *)h;
 
-	/* Copy name into an internal buffer to ensure null-termination. */
+	/*
+	 * The name field is fixed-width and may not be NUL-terminated.
+	 * Use a temporary string only when prefix/name joining is required.
+	 */
 	const char *existing_pathname = archive_entry_pathname(entry);
 	const wchar_t *existing_wcs_pathname = archive_entry_pathname_w(entry);
 	if ((existing_pathname == NULL || existing_pathname[0] == '\0')
 	    && (existing_wcs_pathname == NULL || existing_wcs_pathname[0] == '\0')) {
+		struct archive_string as;
+		const char *pathname;
+		size_t pathname_length;
+
 		archive_string_init(&as);
 		if (header->prefix[0]) {
 			archive_strncpy(&as, header->prefix, sizeof(header->prefix));
 			if (as.s[archive_strlen(&as) - 1] != '/')
 				archive_strappend_char(&as, '/');
 			archive_strncat(&as, header->name, sizeof(header->name));
+			pathname = as.s;
+			pathname_length = archive_strlen(&as);
 		} else {
-			archive_strncpy(&as, header->name, sizeof(header->name));
+			pathname = header->name;
+			pathname_length = sizeof(header->name);
 		}
-		if (archive_entry_copy_pathname_l(entry, as.s, archive_strlen(&as),
-		    tar->sconv) != 0) {
+		r = archive_entry_copy_pathname_l(entry, pathname,
+		    pathname_length, tar->sconv);
+		archive_string_free(&as);
+		if (r != 0) {
 			err = set_conversion_failed_error(a, tar->sconv, "Pathname");
 			if (err == ARCHIVE_FATAL)
 				return (err);
 		}
-		archive_string_free(&as);
 	}
 
 	/* Handle rest of common fields. */
@@ -2388,7 +2399,6 @@ pax_attribute(struct archive_read *a, struct tar *tar, struct archive_entry *ent
 	int64_t t;
 	long n;
 	const char *p;
-	ssize_t bytes_read;
 	int err = ARCHIVE_OK;
 
 	switch (key[0]) {
@@ -2472,7 +2482,7 @@ pax_attribute(struct archive_read *a, struct tar *tar, struct archive_entry *ent
 								  (unsigned long long)sparse_map_limit);
 						err = ARCHIVE_FAILED;
 					} else {
-						p = __archive_read_ahead(a, value_length, &bytes_read);
+						p = __archive_read_ahead(a, value_length, NULL);
 						if (p == NULL) {
 							archive_set_error(&a->archive, EINVAL,
 									  "Truncated archive"
@@ -2560,7 +2570,7 @@ pax_attribute(struct archive_read *a, struct tar *tar, struct archive_entry *ent
 			else if (key_length == 11 && memcmp(key, "symlinktype", 11) == 0) {
 				/* LIBARCHIVE.symlinktype */
 				if (value_length < 16) {
-					p = __archive_read_ahead(a, value_length, &bytes_read);
+					p = __archive_read_ahead(a, value_length, NULL);
 					if (p == NULL) {
 						archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
 								  "Truncated tar archive "
@@ -2594,7 +2604,7 @@ pax_attribute(struct archive_read *a, struct tar *tar, struct archive_entry *ent
 				if (value_length > xattr_limit) {
 					err = ARCHIVE_WARN;
 				} else {
-					p = __archive_read_ahead(a, value_length, &bytes_read);
+					p = __archive_read_ahead(a, value_length, NULL);
 					if (p == NULL) {
 						archive_set_error(&a->archive, EINVAL,
 								  "Truncated archive"
@@ -2624,7 +2634,7 @@ pax_attribute(struct archive_read *a, struct tar *tar, struct archive_entry *ent
 				/* TODO: Should this be FAILED instead? */
 				err = ARCHIVE_WARN;
 			} else {
-				p = __archive_read_ahead(a, value_length, &bytes_read);
+				p = __archive_read_ahead(a, value_length, NULL);
 				if (p == NULL) {
 					archive_set_error(&a->archive, EINVAL,
 							  "Truncated archive"
@@ -2677,7 +2687,7 @@ pax_attribute(struct archive_read *a, struct tar *tar, struct archive_entry *ent
 			}
 			else if (key_length == 6 && memcmp(key, "fflags", 6) == 0) {
 				if (value_length < fflags_limit) {
-					p = __archive_read_ahead(a, value_length, &bytes_read);
+					p = __archive_read_ahead(a, value_length, NULL);
 					if (p == NULL) {
 						/* Truncated archive */
 						archive_set_error(&a->archive, EINVAL,
@@ -2729,7 +2739,7 @@ pax_attribute(struct archive_read *a, struct tar *tar, struct archive_entry *ent
 				key_length -= 6;
 				key += 6;
 				if (value_length < xattr_limit) {
-					p = __archive_read_ahead(a, value_length, &bytes_read);
+					p = __archive_read_ahead(a, value_length, NULL);
 					if (p == NULL) {
 						archive_set_error(&a->archive, EINVAL,
 								  "Truncated archive"
@@ -2759,7 +2769,7 @@ pax_attribute(struct archive_read *a, struct tar *tar, struct archive_entry *ent
 			if (key_length == 9 && memcmp(key, "holesdata", 9) == 0) {
 				/* SUN.holesdata */
 				if (value_length < sparse_map_limit) {
-					p = __archive_read_ahead(a, value_length, &bytes_read);
+					p = __archive_read_ahead(a, value_length, NULL);
 					if (p == NULL) {
 						archive_set_error(&a->archive, EINVAL,
 								  "Truncated archive"
@@ -2833,7 +2843,7 @@ pax_attribute(struct archive_read *a, struct tar *tar, struct archive_entry *ent
 	case 'h':
 		if (key_length == 10 && memcmp(key, "hdrcharset", 10) == 0) {
 			if (value_length < 64) {
-				p = __archive_read_ahead(a, value_length, &bytes_read);
+				p = __archive_read_ahead(a, value_length, NULL);
 				if (p == NULL) {
 					archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
 							  "Truncated tar archive "
@@ -2960,10 +2970,6 @@ pax_time(const char *p, size_t length, int64_t *ps, long *pn)
 	int64_t	s;
 	unsigned long l;
 	int sign;
-	int64_t limit, last_digit_limit;
-
-	limit = INT64_MAX / 10;
-	last_digit_limit = INT64_MAX % 10;
 
 	if (length <= 0) {
 		*ps = 0;
@@ -2979,13 +2985,12 @@ pax_time(const char *p, size_t length, int64_t *ps, long *pn)
 	}
 	while (length > 0 && *p >= '0' && *p <= '9') {
 		digit = *p - '0';
-		if (s > limit ||
-		    (s == limit && digit > last_digit_limit)) {
+		if (archive_ckd_mul_i64(&s, s, 10) ||
+		    archive_ckd_add_i64(&s, s, digit)) {
 			*ps = INT64_MIN;
 			*pn = 0;
 			return;
 		}
-		s = (s * 10) + digit;
 		++p;
 		--length;
 	}
@@ -3209,7 +3214,6 @@ static int
 gnu_sparse_old_read(struct archive_read *a, struct tar *tar,
     const struct archive_entry_header_gnutar *header, int64_t *unconsumed)
 {
-	ssize_t bytes_read;
 	const void *data;
 	struct extended {
 		struct gnu_sparse sparse[21];
@@ -3227,7 +3231,7 @@ gnu_sparse_old_read(struct archive_read *a, struct tar *tar,
 		if (tar_flush_unconsumed(a, unconsumed) != ARCHIVE_OK) {
 			return (ARCHIVE_FATAL);
 		}
-		data = __archive_read_ahead(a, 512, &bytes_read);
+		data = __archive_read_ahead(a, 512, NULL);
 		if (data == NULL) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
 			    "Truncated tar archive "
@@ -3345,14 +3349,12 @@ static int64_t
 gnu_sparse_10_atol(struct archive_read *a, struct tar *tar,
     int64_t *remaining, int64_t *unconsumed)
 {
-	int64_t l, limit, last_digit_limit;
+	int64_t l;
 	const char *p;
 	ssize_t bytes_read;
 	int base, digit;
 
 	base = 10;
-	limit = INT64_MAX / base;
-	last_digit_limit = INT64_MAX % base;
 
 	/*
 	 * Skip any lines starting with '#'; GNU tar specs
@@ -3373,10 +3375,10 @@ gnu_sparse_10_atol(struct archive_read *a, struct tar *tar,
 		if (*p < '0' || *p >= '0' + base)
 			return (ARCHIVE_WARN);
 		digit = *p - '0';
-		if (l > limit || (l == limit && digit > last_digit_limit))
+		if (archive_ckd_mul_i64(&l, l, base) ||
+		    archive_ckd_add_i64(&l, l, digit)) {
 			l = INT64_MAX; /* Truncate on overflow. */
-		else
-			l = (l * base) + digit;
+		}
 		p++;
 		bytes_read--;
 	}
@@ -3522,12 +3524,8 @@ tar_atol(const char *p, size_t char_cnt)
 static int64_t
 tar_atol_base_n(const char *p, size_t char_cnt, int base)
 {
-	int64_t	l, maxval, limit, last_digit_limit;
+	int64_t	l;
 	int digit, sign;
-
-	maxval = INT64_MAX;
-	limit = INT64_MAX / base;
-	last_digit_limit = INT64_MAX % base;
 
 	/* the pointer will not be dereferenced if char_cnt is zero
 	 * due to the way the && operator is evaluated.
@@ -3542,25 +3540,22 @@ tar_atol_base_n(const char *p, size_t char_cnt, int base)
 		sign = -1;
 		p++;
 		char_cnt--;
-
-		maxval = INT64_MIN;
-		limit = -(INT64_MIN / base);
-		last_digit_limit = -(INT64_MIN % base);
 	}
 
 	l = 0;
 	if (char_cnt != 0) {
 		digit = *p - '0';
-		while (digit >= 0 && digit < base  && char_cnt != 0) {
-			if (l>limit || (l == limit && digit >= last_digit_limit)) {
-				return maxval; /* Truncate on overflow. */
+		while (digit >= 0 && digit < base && char_cnt != 0) {
+			if (archive_ckd_mul_i64(&l, l, base) ||
+			    archive_ckd_add_i64(&l, l, sign * digit)) {
+				 /* Truncate on overflow. */
+				return sign < 0 ? INT64_MIN : INT64_MAX;
 			}
-			l = (l * base) + digit;
 			digit = *++p - '0';
 			char_cnt--;
 		}
 	}
-	return (sign < 0) ? -l : l;
+	return l;
 }
 
 static int64_t
