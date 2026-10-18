@@ -121,6 +121,8 @@ static const unsigned char zisofs_magic[8] = {
 #define ZF_LOG2_BS	15	/* log2 block size; 32K bytes. */
 #define ZF_BLOCK_SIZE	(1UL << ZF_LOG2_BS)
 
+#define MAX_JOLIET_ID_NUM	46656 /* 3 base 36 digits */
+
 /*
  * Manage extra records.
  */
@@ -1010,7 +1012,7 @@ static int	idr_start(struct archive_write *, struct idr *,
 static void	idr_register(struct idr *, struct isoent *, int,
 		    int);
 static void	idr_extend_identifier(struct idrent *, int, int);
-static void	idr_resolve(struct idr *, void (*)(unsigned char *, int));
+static int 	idr_resolve(struct idr *, void (*)(unsigned char *, int));
 static void	idr_set_num(unsigned char *, int);
 static void	idr_set_num_beutf16(unsigned char *, int);
 static int	isoent_gen_iso9660_identifier(struct archive_write *,
@@ -4285,9 +4287,11 @@ _write_path_table(struct archive_write *a, int type_m, int depth,
 			set_num_731(bp+3, np->dir_location);
 		/* Parent Directory Number */
 		if (type_m)
-			set_num_722(bp+7, np->parent->dir_number);
+			set_num_722(bp+7,
+			    np->parent != NULL ? np->parent->dir_number : 0);
 		else
-			set_num_721(bp+7, np->parent->dir_number);
+			set_num_721(bp+7,
+			    np->parent != NULL ? np->parent->dir_number : 0);
 		/* Directory Identifier */
 		if (np->identifier == NULL)
 			bp[9] = 0;
@@ -4914,20 +4918,29 @@ isofile_gen_utility_names(struct archive_write *a, struct isofile *file)
 				 *     --> 'dir/dir2/'
 				 */
 				char *rp = p -1;
+				size_t off;
+				for (off = 4; p[off] == '/'; off++)
+					;
 				while (rp >= dirname) {
 					if (*rp == '/')
 						break;
 					--rp;
 				}
 				if (rp > dirname) {
-					strcpy(rp, p+3);
+					memmove(rp + 1, p + off, strlen(p + off) + 1);
 					p = rp;
 				} else {
-					strcpy(dirname, p+4);
+					memmove(dirname, p + off, strlen(p + off) + 1);
 					p = dirname;
 				}
 			} else
 				p++;
+		} else if (p == dirname && p[0] == '.' && p[1] == '.' && p[2] == '/') {
+			size_t off;
+			for (off = 3; p[off] == '/'; off++)
+				;
+			memmove(dirname, p + off, strlen(p + off) + 1);
+			p = dirname;
 		} else
 			p++;
 	}
@@ -5530,7 +5543,7 @@ isoent_setup_file_location(struct iso9660 *iso9660, int location)
 static int
 get_path_component(char *name, size_t n, const char *fn)
 {
-	char *p;
+	const char *p;
 	size_t l;
 
 	p = strchr(fn, '/');
@@ -5909,10 +5922,21 @@ idr_extend_identifier(struct idrent *wnp, int numsize, int nullsize)
 {
 	unsigned char *p;
 	int wnp_ext_off;
+	int new_id_len;
 
 	wnp_ext_off = wnp->isoent->ext_off;
 	if (wnp->noff + numsize != wnp_ext_off) {
-		p = (unsigned char *)wnp->isoent->identifier;
+		new_id_len = wnp->noff + numsize + wnp->isoent->ext_len;
+		/*
+		 * Reallocate the identifier buffer to fit the expanded
+		 * name.  Add extra space for a version suffix (";1")
+		 * that may be appended later.
+		 */
+		p = (unsigned char *)realloc(wnp->isoent->identifier,
+		    new_id_len + nullsize + numsize + 4);
+		if (p == NULL)
+			return;
+		wnp->isoent->identifier = (char *)p;
 		/* Extend the filename; foo.c --> foo___.c */
 		memmove(p + wnp->noff + numsize, p + wnp_ext_off,
 		    wnp->isoent->ext_len + nullsize);
@@ -5921,7 +5945,7 @@ idr_extend_identifier(struct idrent *wnp, int numsize, int nullsize)
 	}
 }
 
-static void
+static int
 idr_resolve(struct idr *idr, void (*fsetnum)(unsigned char *p, int num))
 {
 	struct idrent *n;
@@ -5931,10 +5955,13 @@ idr_resolve(struct idr *idr, void (*fsetnum)(unsigned char *p, int num))
 		idr_extend_identifier(n, idr->num_size, idr->null_size);
 		p = (unsigned char *)n->isoent->identifier + n->noff;
 		do {
+			if (n->avail->rename_num >= MAX_JOLIET_ID_NUM)
+				return (-ERANGE);
 			fsetnum(p, n->avail->rename_num++);
 		} while (!__archive_rb_tree_insert_node(
 		    &(idr->rbtree), &(n->rbnode)));
 	}
+	return (0);
 }
 
 static void
@@ -6199,7 +6226,11 @@ isoent_gen_iso9660_identifier(struct archive_write *a, struct isoent *isoent,
 	}
 
 	/* Resolve duplicate identifier. */
-	idr_resolve(idr, idr_set_num);
+	r = idr_resolve(idr, idr_set_num);
+	if (r < 0) {
+		archive_set_error(&a->archive, -r, "Too many duplicated identifiers");
+		return (ARCHIVE_FATAL);
+	}
 
 	/* Add a period and a version number to identifiers. */
 	for (np = isoent->children.first; np != NULL; np = np->chnext) {
@@ -6243,6 +6274,8 @@ isoent_gen_joliet_identifier(struct archive_write *a, struct isoent *isoent,
 	static const struct archive_rb_tree_ops rb_ops = {
 		isoent_cmp_node_joliet, isoent_cmp_key_joliet
 	};
+	const int num_size = 6;
+	const int null_size = 2;
 
 	if (isoent->children.cnt == 0)
 		return (0);
@@ -6253,7 +6286,7 @@ isoent_gen_joliet_identifier(struct archive_write *a, struct isoent *isoent,
 	else
 		ffmax = 128;
 
-	r = idr_start(a, idr, isoent->children.cnt, (int)ffmax, 6, 2, &rb_ops);
+	r = idr_start(a, idr, isoent->children.cnt, (int)ffmax, num_size, null_size, &rb_ops);
 	if (r < 0)
 		return (r);
 
@@ -6269,7 +6302,7 @@ isoent_gen_joliet_identifier(struct archive_write *a, struct isoent *isoent,
 		if ((l = np->file->basename_utf16.length) > ffmax)
 			l = ffmax;
 
-		p = malloc((l+1)*2);
+		p = malloc(l + num_size + null_size);
 		if (p == NULL) {
 			archive_set_error(&a->archive, ENOMEM,
 			    "Can't allocate memory");
@@ -6343,7 +6376,11 @@ isoent_gen_joliet_identifier(struct archive_write *a, struct isoent *isoent,
 	}
 
 	/* Resolve duplicate identifier with Joliet Volume. */
-	idr_resolve(idr, idr_set_num_beutf16);
+	r = idr_resolve(idr, idr_set_num_beutf16);
+	if (r < 0) {
+		archive_set_error(&a->archive, -r, "Too many duplicated identifiers");
+		return (ARCHIVE_FATAL);
+	}
 
 	return (ARCHIVE_OK);
 }
@@ -6824,7 +6861,15 @@ _compare_path_table(const void *v1, const void *v2)
 	p2 = *((const struct isoent **)(uintptr_t)v2);
 
 	/* Compare parent directory number */
-	cmp = p1->parent->dir_number - p2->parent->dir_number;
+	if (p1->parent == NULL || p2->parent == NULL) {
+		if (p1->parent == p2->parent)
+			cmp = 0;
+		else if (p1->parent == NULL)
+			return (-1);
+		else
+			return (1);
+	} else
+		cmp = p1->parent->dir_number - p2->parent->dir_number;
 	if (cmp != 0)
 		return (cmp);
 
@@ -6867,7 +6912,15 @@ _compare_path_table_joliet(const void *v1, const void *v2)
 	p2 = *((const struct isoent **)(uintptr_t)v2);
 
 	/* Compare parent directory number */
-	cmp = p1->parent->dir_number - p2->parent->dir_number;
+	if (p1->parent == NULL || p2->parent == NULL) {
+		if (p1->parent == p2->parent)
+			cmp = 0;
+		else if (p1->parent == NULL)
+			return (-1);
+		else
+			return (1);
+	} else
+		cmp = p1->parent->dir_number - p2->parent->dir_number;
 	if (cmp != 0)
 		return (cmp);
 
@@ -7968,7 +8021,7 @@ zisofs_extract(struct archive_write *a, struct zisofs_extract *zisofs,
 			r = zng_inflateInit(&zisofs->stream);
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-			    "Can't initialize zisofs decompression.");
+			    "Can't initialize zisofs decompression");
 			return (ARCHIVE_FATAL);
 		}
 		zisofs->stream_valid = 1;

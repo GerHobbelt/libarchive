@@ -307,14 +307,14 @@ static const uint32_t crctab[] = {
 static const unsigned char safe_char[256] = {
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 00 - 0F */
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 10 - 1F */
-	/* !"$%&'()*+,-./  EXCLUSION:0x20( ) 0x23(#) */
-	0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 20 - 2F */
-	/* 0123456789:;<>?  EXCLUSION:0x3d(=) */
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, /* 30 - 3F */
+	/* !"$%&'()+,-./  EXCLUSION:0x20( ) 0x23(#) 0x2a(*) */
+	0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, /* 20 - 2F */
+	/* 0123456789:;<>  EXCLUSION:0x3d(=) 0x3f(?) */
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, /* 30 - 3F */
 	/* @ABCDEFGHIJKLMNO */
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 40 - 4F */
-	/* PQRSTUVWXYZ[]^_ EXCLUSION:0x5c(\)  */
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, /* 50 - 5F */
+	/* PQRSTUVWXYZ]^_ EXCLUSION:0x5b([) 0x5c(\)  */
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, /* 50 - 5F */
 	/* `abcdefghijklmno */
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 60 - 6F */
 	/* pqrstuvwxyz{|}~ */
@@ -988,7 +988,8 @@ write_mtree_entry(struct archive_write *a, struct mtree_entry *me)
 		 * a full pathname.
 		 */
 		mtree_quote(str, me->parentdir.s);
-		archive_strappend_char(str, '/');
+		if (strcmp(me->basename.s, ".") != 0)
+			archive_strappend_char(str, '/');
 	}
 	mtree_quote(str, me->basename.s);
 
@@ -1145,6 +1146,8 @@ write_mtree_entry_tree(struct archive_write *a)
 	int ret;
 
 	do {
+		if (np->dir_info == NULL)
+			break;
 		if (mtree->output_global_set) {
 			/*
 			 * Collect attribute information to know which value
@@ -1611,6 +1614,7 @@ sum_update(struct mtree_writer *mtree, const void *buff, size_t n)
 static void
 sum_final(struct mtree_writer *mtree, struct reg_info *reg)
 {
+	struct ae_digest digest;
 
 	if (mtree->compute_sum & F_CKSUM) {
 		uint64_t len;
@@ -1620,40 +1624,34 @@ sum_final(struct mtree_writer *mtree, struct reg_info *reg)
 		reg->crc = ~mtree->crc;
 	}
 #ifdef ARCHIVE_HAS_MD5
-	if ((mtree->compute_sum & F_MD5)
-		&& !(reg->mset_digest & AE_MSET_DIGEST_MD5))
+	if (mtree->compute_sum & F_MD5)
 
-		archive_md5_final(&mtree->md5ctx, reg->digest.md5);
+		archive_md5_final(&mtree->md5ctx, (reg->mset_digest & AE_MSET_DIGEST_MD5) ? digest.md5 : reg->digest.md5);
 #endif
 #ifdef ARCHIVE_HAS_RMD160
-	if ((mtree->compute_sum & F_RMD160)
-		&& !(reg->mset_digest & AE_MSET_DIGEST_RMD160))
+	if (mtree->compute_sum & F_RMD160)
 
-		archive_rmd160_final(&mtree->rmd160ctx, reg->digest.rmd160);
+		archive_rmd160_final(&mtree->rmd160ctx, (reg->mset_digest & AE_MSET_DIGEST_RMD160) ? digest.rmd160 : reg->digest.rmd160);
 #endif
 #ifdef ARCHIVE_HAS_SHA1
-	if ((mtree->compute_sum & F_SHA1)
-		&& !(reg->mset_digest & AE_MSET_DIGEST_SHA1))
+	if (mtree->compute_sum & F_SHA1)
 
-		archive_sha1_final(&mtree->sha1ctx, reg->digest.sha1);
+		archive_sha1_final(&mtree->sha1ctx, (reg->mset_digest & AE_MSET_DIGEST_SHA1) ? digest.sha1 : reg->digest.sha1);
 #endif
 #ifdef ARCHIVE_HAS_SHA256
-	if ((mtree->compute_sum & F_SHA256)
-		&& !(reg->mset_digest & AE_MSET_DIGEST_SHA256))
+	if (mtree->compute_sum & F_SHA256)
 
-		archive_sha256_final(&mtree->sha256ctx, reg->digest.sha256);
+		archive_sha256_final(&mtree->sha256ctx, (reg->mset_digest & AE_MSET_DIGEST_SHA256) ? digest.sha256 : reg->digest.sha256);
 #endif
 #ifdef ARCHIVE_HAS_SHA384
-	if ((mtree->compute_sum & F_SHA384)
-		&& !(reg->mset_digest & AE_MSET_DIGEST_SHA384))
+	if (mtree->compute_sum & F_SHA384)
 
-		archive_sha384_final(&mtree->sha384ctx, reg->digest.sha384);
+		archive_sha384_final(&mtree->sha384ctx, (reg->mset_digest & AE_MSET_DIGEST_SHA384) ? digest.sha384 : reg->digest.sha384);
 #endif
 #ifdef ARCHIVE_HAS_SHA512
-	if ((mtree->compute_sum & F_SHA512)
-		&& !(reg->mset_digest & AE_MSET_DIGEST_SHA512))
+	if (mtree->compute_sum & F_SHA512)
 
-		archive_sha512_final(&mtree->sha512ctx, reg->digest.sha512);
+		archive_sha512_final(&mtree->sha512ctx, (reg->mset_digest & AE_MSET_DIGEST_SHA512) ? digest.sha512 : reg->digest.sha512);
 #endif
 	/* Save what types of sum are computed. */
 	reg->compute_sum = mtree->compute_sum;
@@ -2041,7 +2039,7 @@ mtree_entry_find_child(struct mtree_entry *parent, const char *child_name)
 static int
 get_path_component(char *name, size_t n, const char *fn)
 {
-	char *p;
+	const char *p;
 	size_t l;
 
 	p = strchr(fn, '/');

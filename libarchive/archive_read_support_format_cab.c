@@ -1338,6 +1338,10 @@ cab_next_cfdata(struct archive_read *a)
 	}
 	return (ARCHIVE_OK);
 invalid:
+	cfdata->compressed_size = 0;
+	cfdata->compressed_bytes_remaining = 0;
+	cfdata->uncompressed_size = 0;
+	cfdata->uncompressed_bytes_remaining = 0;
 	archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
 	    "Invalid CFDATA");
 	return (ARCHIVE_FATAL);
@@ -1367,7 +1371,7 @@ cab_read_ahead_cfdata(struct archive_read *a, ssize_t *avail)
 		return (cab_read_ahead_cfdata_lzx(a, avail));
 	default: /* Unsupported compression. */
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
-		    "Unsupported CAB compression : %s",
+		    "Unsupported CAB compression: %s",
 		    cab->entry_cffolder->compname);
 		*avail = ARCHIVE_FAILED;
 		return (NULL);
@@ -1455,7 +1459,7 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 			    -15 /* Don't check for zlib header */);
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-			    "Can't initialize deflate decompression.");
+			    "Can't initialize deflate decompression");
 			*avail = ARCHIVE_FATAL;
 			return (NULL);
 		}
@@ -1481,6 +1485,14 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 		    cab->uncompressed_buffer + cab->stream.total_out;
 		cab->stream.avail_out =
 		    cfdata->uncompressed_size - cab->stream.total_out;
+		if ((size_t)cfdata->uncompressed_size >
+		    cab->uncompressed_buffer_size) {
+			archive_set_error(&a->archive,
+			    ARCHIVE_ERRNO_FILE_FORMAT,
+			    "Invalid CFDATA uncompressed size");
+			*avail = ARCHIVE_FATAL;
+			return (NULL);
+		}
 
 		d = __archive_read_ahead(a, 1, &bytes_avail);
 		if (bytes_avail <= 0) {
@@ -3216,6 +3228,10 @@ lzx_make_huffman_table(struct huffman *hf)
 	bitlen = hf->bitlen;
 	len_avail = hf->len_size;
 	hf->tree_used = 0;
+	/* Initialize table to invalid values */
+	for (i = 0; i < tbl_size; i++) {
+		tbl[i] = (uint16_t)hf->len_size;
+	}
 	for (i = 0; i < len_avail; i++) {
 		uint16_t *p;
 		int len, cnt;

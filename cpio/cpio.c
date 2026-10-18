@@ -538,7 +538,7 @@ mode_out(struct cpio *cpio)
 	int r;
 
 	if (cpio->option_append)
-		lafe_errc(1, 0, "Append mode not yet supported.");
+		lafe_errc(1, 0, "Append mode not yet supported");
 
 	cpio->archive_read_disk = archive_read_disk_new();
 	if (cpio->archive_read_disk == NULL)
@@ -896,7 +896,7 @@ entry_to_archive(struct cpio *cpio, struct archive_entry *entry)
 			if (bytes_write < bytes_read) {
 				lafe_warnc(0,
 				    "Truncated write; file may have "
-				    "grown while being archived.");
+				    "grown while being archived");
 			}
 			bytes_read = read(fd, buff, sizeof(buff));
 		}
@@ -1010,7 +1010,10 @@ mode_in(struct cpio *cpio)
 			lafe_errc(1, archive_errno(a),
 			    "%s", archive_error_string(a));
 		}
-		if (archive_match_path_excluded(cpio->matching, entry))
+		r = archive_match_path_excluded(cpio->matching, entry);
+		if (r < 0)
+			lafe_errc(1, 0, "%s", archive_error_string(cpio->matching));
+		if (r)
 			continue;
 		if (cpio->option_rename)
 			cpio_rename(entry);
@@ -1125,7 +1128,10 @@ mode_list(struct cpio *cpio)
 			lafe_errc(1, archive_errno(a),
 			    "%s", archive_error_string(a));
 		}
-		if (archive_match_path_excluded(cpio->matching, entry))
+		r = archive_match_path_excluded(cpio->matching, entry);
+		if (r < 0)
+			lafe_errc(1, 0, "%s", archive_error_string(cpio->matching));
+		if (r)
 			continue;
 		if (cpio->verbose)
 			list_item_verbose(cpio, entry);

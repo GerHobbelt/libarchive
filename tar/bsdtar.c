@@ -1035,7 +1035,7 @@ int main(int argc, const char** argv)
 
 	if (bsdtar->return_value != 0)
 		lafe_warnc(0,
-		    "Error exit delayed from previous errors.");
+		    "Error exit delayed from previous errors");
 	return (bsdtar->return_value);
 }
 
