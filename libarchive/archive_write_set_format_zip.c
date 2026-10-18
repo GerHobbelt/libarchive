@@ -70,6 +70,7 @@
 #include "archive_entry.h"
 #include "archive_entry_locale.h"
 #include "archive_hmac_private.h"
+#include "archive_integer.h"
 #include "archive_private.h"
 #include "archive_random_private.h"
 #include "archive_time_private.h"
@@ -1067,8 +1068,13 @@ archive_write_zip_header(struct archive_write *a, struct archive_entry *entry)
 			default:
 				break;
 			}
-			if (zip->entry_compression == COMPRESSION_STORE)
-				zip->entry_compressed_size += additional_size;
+			if (zip->entry_compression == COMPRESSION_STORE &&
+			    archive_ckd_add_i64(&zip->entry_compressed_size,
+				zip->entry_compressed_size, additional_size)) {
+				archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+				    "File size too large for encrypted ZIP entry");
+				return (ARCHIVE_FAILED);
+			}
 		}
 
 		/*
@@ -1082,7 +1088,7 @@ archive_write_zip_header(struct archive_write *a, struct archive_entry *entry)
 		 *    (compression might make file larger)
 		 */
 		if ((zip->flags & ZIP_FLAG_FORCE_ZIP64)
-		    || (zip->entry_uncompressed_size + additional_size > ZIP_4GB_MAX)
+		    || (zip->entry_uncompressed_size > ZIP_4GB_MAX - additional_size)
 		    || (zip->entry_uncompressed_size > ZIP_4GB_MAX_UNCOMPRESSED
 			&& zip->entry_compression != COMPRESSION_STORE)) {
 			MIN_VERSION_NEEDED(45);

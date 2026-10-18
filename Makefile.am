@@ -381,6 +381,7 @@ libarchive_test_SOURCES= \
 	$(test_utils_SOURCES) \
 	libarchive/test/read_open_memory.c \
 	libarchive/test/test_7zip_filename_encoding.c \
+	libarchive/test/test_acl_from_text_overread.c \
 	libarchive/test/test_acl_nfs4.c \
 	libarchive/test/test_acl_nfs4_null_id_overflow.c \
 	libarchive/test/test_acl_nfs4_text.c \
@@ -456,6 +457,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_open_filename.c \
 	libarchive/test/test_pax_filename_encoding.c \
 	libarchive/test/test_pax_xattr_header.c \
+	libarchive/test/test_read_data_into_fd_size_exceeds_declared.c \
 	libarchive/test/test_read_data_large.c \
 	libarchive/test/test_read_disk.c \
 	libarchive/test/test_read_disk_directory_traversals.c \
@@ -486,6 +488,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_ar.c \
 	libarchive/test/test_read_format_cab.c \
 	libarchive/test/test_read_format_cab_filename.c \
+	libarchive/test/test_read_format_cab_lzx_e8.c \
 	libarchive/test/test_read_format_cab_lzx_oob.c \
 	libarchive/test/test_read_format_cab_mszip_oob.c \
 	libarchive/test/test_read_format_cab_multi.c \
@@ -536,6 +539,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_lha_filename.c \
 	libarchive/test/test_read_format_lha_filename_utf16.c \
 	libarchive/test/test_read_format_lha_oversize_header.c \
+	libarchive/test/test_read_format_lha_symlink_missing_target.c \
 	libarchive/test/test_read_format_mtree.c \
 	libarchive/test/test_read_format_mtree_crash747.c \
 	libarchive/test/test_read_format_pax_bz2.c \
@@ -594,7 +598,10 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_zip_nofiletype.c \
 	libarchive/test/test_read_format_zip_padded.c \
 	libarchive/test/test_read_format_zip_sfx.c \
+	libarchive/test/test_read_format_zip_size_exceeds_declared.c \
+	libarchive/test/test_read_format_zip_symlink_unsupported_compression.c \
 	libarchive/test/test_read_format_zip_traditional_encryption_data.c \
+	libarchive/test/test_read_format_zip_uncompressed_size_off_by_4gib.c \
 	libarchive/test/test_read_format_zip_winzip_aes.c \
 	libarchive/test/test_read_format_zip_winzip_aes_large.c \
 	libarchive/test/test_read_format_zip_zip64.c \
@@ -825,6 +832,8 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_rar_multivolume_uncompressed_files.part08.rar.uu \
 	libarchive/test/test_rar_multivolume_uncompressed_files.part09.rar.uu \
 	libarchive/test/test_rar_multivolume_uncompressed_files.part10.rar.uu \
+	libarchive/test/test_read_data_into_fd_size_exceeds_declared_deflate.zip.uu \
+	libarchive/test/test_read_data_into_fd_size_exceeds_declared_stored.zip.uu \
 	libarchive/test/test_read_files_compressed.part01.uu \
 	libarchive/test/test_read_files_compressed.part02.uu \
 	libarchive/test/test_read_filter_grzip.tar.grz.uu \
@@ -864,6 +873,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_7zip_delta4_lzma2.7z.uu \
 	libarchive/test/test_read_format_7zip_empty_archive.7z.uu \
 	libarchive/test/test_read_format_7zip_empty_file.7z.uu \
+	libarchive/test/test_read_format_7zip_archive_properties.7z.uu \
 	libarchive/test/test_read_format_7zip_encryption.7z.uu \
 	libarchive/test/test_read_format_7zip_encryption_header.7z.uu \
 	libarchive/test/test_read_format_7zip_encryption_partially.7z.uu \
@@ -905,6 +915,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_cab_2.cab.uu \
 	libarchive/test/test_read_format_cab_3.cab.uu \
 	libarchive/test/test_read_format_cab_filename_cp932.cab.uu \
+	libarchive/test/test_read_format_cab_lzx_e8.cab.uu \
 	libarchive/test/test_read_format_cab_lzx_oob.cab.uu \
 	libarchive/test/test_read_format_cab_multi.p1.cab.uu \
 	libarchive/test/test_read_format_cab_multi.p2.cab.uu \
@@ -962,6 +973,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_lha_lh6.lzh.uu \
 	libarchive/test/test_read_format_lha_lh7.lzh.uu \
 	libarchive/test/test_read_format_lha_oversize_header.lzh.uu \
+	libarchive/test/test_read_format_lha_symlink_missing_target.lzh.uu \
 	libarchive/test/test_read_format_lha_withjunk.lzh.uu \
 	libarchive/test/test_read_format_mtree.mtree.uu \
 	libarchive/test/test_read_format_mtree_nomagic.mtree.uu \
@@ -1120,14 +1132,19 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_zip_padded1.zip.uu \
 	libarchive/test/test_read_format_zip_padded2.zip.uu \
 	libarchive/test/test_read_format_zip_padded3.zip.uu \
+	libarchive/test/test_read_format_zip_pkware_unix.zip.uu \
 	libarchive/test/test_read_format_zip_ppmd8.zipx.uu \
 	libarchive/test/test_read_format_zip_ppmd8_aes256_streaming.zipx.uu \
 	libarchive/test/test_read_format_zip_ppmd8_crash_1.zipx.uu \
 	libarchive/test/test_read_format_zip_ppmd8_crash_2.zipx.uu \
 	libarchive/test/test_read_format_zip_ppmd8_multi.zipx.uu \
 	libarchive/test/test_read_format_zip_sfx.uu \
+	libarchive/test/test_read_format_zip_size_exceeds_declared_deflate.zip.uu \
+	libarchive/test/test_read_format_zip_size_exceeds_declared_stored.zip.uu \
 	libarchive/test/test_read_format_zip_symlink.zip.uu \
+	libarchive/test/test_read_format_zip_symlink_unsupported_compression.zip.uu \
 	libarchive/test/test_read_format_zip_traditional_encryption_data.zip.uu \
+	libarchive/test/test_read_format_zip_uncompressed_size_off_by_4gib.zip.uu \
 	libarchive/test/test_read_format_zip_ux.zip.uu \
 	libarchive/test/test_read_format_zip_winzip_aes128.zip.uu \
 	libarchive/test/test_read_format_zip_winzip_aes256.zip.uu \
@@ -1327,6 +1344,7 @@ bsdtar_test_SOURCES= \
 	tar/test/test_option_r.c \
 	tar/test/test_option_s.c \
 	tar/test/test_option_safe_writes.c \
+	tar/test/test_option_stdout_size_exceeds_declared.c \
 	tar/test/test_option_uid_uname.c \
 	tar/test/test_option_uuencode.c \
 	tar/test/test_option_xattrs.c \
@@ -1378,6 +1396,8 @@ bsdtar_test_EXTRA_DIST= \
 	tar/test/test_option_keep_newer_files.tar.Z.uu \
 	tar/test/test_option_passphrase.zip.uu \
 	tar/test/test_option_s.tar.Z.uu \
+	tar/test/test_option_stdout_size_exceeds_declared_deflate.zip.uu \
+	tar/test/test_option_stdout_size_exceeds_declared_stored.zip.uu \
 	tar/test/test_patterns_2.tar.uu \
 	tar/test/test_patterns_3.tar.uu \
 	tar/test/test_patterns_4.tar.uu \

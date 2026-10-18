@@ -1338,14 +1338,6 @@ archive_write_pax_header(struct archive_write *a,
 		archive_entry_set_size(entry_main, 0);
 
 	/*
-	 * Pax-restricted does not store data for hardlinks, in order
-	 * to improve compatibility with ustar.
-	 */
-	if (a->archive.archive_format != ARCHIVE_FORMAT_TAR_PAX_INTERCHANGE &&
-	    hardlink != NULL)
-		archive_entry_set_size(entry_main, 0);
-
-	/*
 	 * XXX Full pax interchange format does permit a hardlink
 	 * entry to have data associated with it.  I'm not supporting
 	 * that here because the client expects me to tell them whether
@@ -1419,6 +1411,14 @@ archive_write_pax_header(struct archive_write *a,
 		__LA_MODE_T mode;
 
 		pax_attr_entry = archive_entry_new2(&a->archive);
+		if (pax_attr_entry == NULL) {
+			archive_set_error(&a->archive, ENOMEM,
+			    "Out of memory");
+			archive_entry_free(entry_main);
+			archive_string_free(&entry_name);
+			return (ARCHIVE_FATAL);
+		}
+
 		p = entry_name.s;
 		archive_entry_set_pathname(pax_attr_entry,
 		    build_pax_attribute_name(pax_entry_name, p));

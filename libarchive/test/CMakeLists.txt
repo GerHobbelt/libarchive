@@ -10,6 +10,7 @@ IF(ENABLE_TEST)
     read_open_memory.c
     test.h
     test_7zip_filename_encoding.c
+    test_acl_from_text_overread.c
     test_acl_nfs4.c
     test_acl_nfs4_null_id_overflow.c
     test_acl_nfs4_text.c
@@ -85,6 +86,7 @@ IF(ENABLE_TEST)
     test_open_filename.c
     test_pax_filename_encoding.c
     test_pax_xattr_header.c
+    test_read_data_into_fd_size_exceeds_declared.c
     test_read_data_large.c
     test_read_disk.c
     test_read_disk_directory_traversals.c
@@ -115,6 +117,7 @@ IF(ENABLE_TEST)
     test_read_format_ar.c
     test_read_format_cab.c
     test_read_format_cab_filename.c
+    test_read_format_cab_lzx_e8.c
     test_read_format_cab_lzx_oob.c
     test_read_format_cab_mszip_oob.c
     test_read_format_cab_multi.c
@@ -165,6 +168,7 @@ IF(ENABLE_TEST)
     test_read_format_lha_filename.c
     test_read_format_lha_filename_utf16.c
     test_read_format_lha_oversize_header.c
+    test_read_format_lha_symlink_missing_target.c
     test_read_format_mtree.c
     test_read_format_mtree_crash747.c
     test_read_format_pax_bz2.c
@@ -223,7 +227,10 @@ IF(ENABLE_TEST)
     test_read_format_zip_nofiletype.c
     test_read_format_zip_padded.c
     test_read_format_zip_sfx.c
+    test_read_format_zip_size_exceeds_declared.c
+    test_read_format_zip_symlink_unsupported_compression.c
     test_read_format_zip_traditional_encryption_data.c
+    test_read_format_zip_uncompressed_size_off_by_4gib.c
     test_read_format_zip_winzip_aes.c
     test_read_format_zip_winzip_aes_large.c
     test_read_format_zip_zip64.c

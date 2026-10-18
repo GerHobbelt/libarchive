@@ -1950,8 +1950,8 @@ static int process_head_file(struct archive_read* a, struct rar5* rar,
 
 		if (file_attr & (ATTR_READONLY | ATTR_HIDDEN | ATTR_SYSTEM)) {
 			char buf[sizeof(",rdonly,hidden,system")];
-			char *fflags[3] = { "", "", "" };
-			char **flag = fflags;
+			const char *fflags[3] = { "", "", "" };
+			const char **flag = fflags;
 
 			if (file_attr & ATTR_READONLY)
 				*flag++ = ",rdonly";
@@ -2483,6 +2483,9 @@ static int skip_base_block(struct archive_read* a) {
 	 * by header reader; operations on this archive_entry will be discarded.
 	 */
 	struct archive_entry* entry = archive_entry_new();
+	if (entry == NULL)
+		return ARCHIVE_FATAL;
+
 	ret = process_base_block(a, entry);
 
 	/* Discard operations on this archive_entry structure. */

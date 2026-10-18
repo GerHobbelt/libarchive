@@ -265,6 +265,15 @@ struct zip {
 /* Many systems define min or MIN, but not all. */
 #define	zipmin(a,b) ((a) < (b) ? (a) : (b))
 
+/* True if this entry has declared a specific uncompressed size. */
+static int
+zip_entry_size_is_set(const struct zip_entry *zip_entry)
+{
+	return (0 == (zip_entry->zip_flags & ZIP_LENGTH_AT_END)
+	    || (zip_entry->uncompressed_size > 0
+		&& zip_entry->uncompressed_size != 0xffffffff));
+}
+
 #ifdef HAVE_ZLIB_H
 static int
 zip_read_data_deflate(struct archive_read *a, const void **buff,
@@ -752,6 +761,22 @@ process_extra(struct archive_read *a, struct archive_entry *entry,
 			/* archive_le32dec(p + offset) gives disk
 			 * on which file starts, but we don't handle
 			 * multi-volume Zip files. */
+			break;
+		case 0x000d:
+			/* PKWARE Unix Extra Field fixed metadata. */
+			if (datasize >= 12) {
+				zip_entry->atime = archive_le32dec(p + offset);
+				zip_entry->mtime =
+				    archive_le32dec(p + offset + 4);
+				zip_entry->uid =
+				    archive_le16dec(p + offset + 8);
+				zip_entry->gid =
+				    archive_le16dec(p + offset + 10);
+				/*
+				 * APPNOTE.TXT also defines additional data after
+				 * this fixed metadata, depending on file type.
+				 */
+			}
 			break;
 #ifdef DEBUG
 		case 0x0017:
@@ -1463,10 +1488,7 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 			    "Read error skipping symlink target name");
 			return ARCHIVE_FATAL;
 		}
-	} else if (0 == (zip_entry->zip_flags & ZIP_LENGTH_AT_END)
-	   || (zip_entry->uncompressed_size > 0
-	       && zip_entry->uncompressed_size != 0xffffffff)) {
-		/* Set the size only if it's meaningful. */
+	} else if (zip_entry_size_is_set(zip_entry)) {
 		archive_entry_set_size(entry, zip_entry->uncompressed_size);
 	}
 	zip->entry_bytes_remaining = zip_entry->compressed_size;
@@ -3458,6 +3480,25 @@ archive_read_format_zip_read_data(struct archive_read *a,
 	}
 	if (r != ARCHIVE_OK)
 		return (r);
+
+	/*
+	 * FAIL if there are more uncompressed bytes than were
+	 * initially advertised.  The end-of-entry check below also
+	 * compares these values, but only once decoding reaches its
+	 * own natural end. Fail the entry so a caller relying on
+	 * archive_entry_size() as a hard boundary is never misled;
+	 * later entries in the archive can still be read normally.
+	 */
+	if (*size > 0 && zip_entry_size_is_set(zip->entry) &&
+	    zip->entry_uncompressed_bytes_read > zip->entry->uncompressed_size) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "ZIP uncompressed data is larger than the declared "
+		    "entry size (read at least %jd, expected %jd)",
+		    (intmax_t)zip->entry_uncompressed_bytes_read,
+		    (intmax_t)zip->entry->uncompressed_size);
+		return (ARCHIVE_FAILED);
+	}
+
 	if (*size > 0) {
 		zip->computed_crc32 = zip->crc32func(zip->computed_crc32, *buff,
 						     (unsigned)*size);
@@ -3488,10 +3529,8 @@ archive_read_format_zip_read_data(struct archive_read *a,
 			    (intmax_t)zip->entry->compressed_size);
 			return (ARCHIVE_FAILED);
 		}
-		/* Size field only stores the lower 32 bits of the actual
-		 * size. */
-		if ((zip->entry->uncompressed_size & UINT32_MAX)
-		    != (zip->entry_uncompressed_bytes_read & UINT32_MAX)) {
+		if (zip->entry->uncompressed_size !=
+		    zip->entry_uncompressed_bytes_read) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "ZIP uncompressed data is wrong size "
 			    "(read %jd, expected %jd)",

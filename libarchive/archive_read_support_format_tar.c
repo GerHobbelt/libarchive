@@ -1074,21 +1074,19 @@ static int
 header_Solaris_ACL(struct archive_read *a, struct tar *tar,
     struct archive_entry *entry, const void *h, int64_t *unconsumed)
 {
-	const struct archive_entry_header_ustar *header;
 	struct archive_string	 acl_text;
 	size_t size;
 	int err, acl_type;
 	uint64_t type;
 	char *acl, *p;
 
-	header = (const struct archive_entry_header_ustar *)h;
-	size = (size_t)tar_atol(header->size, sizeof(header->size));
 	archive_string_init(&acl_text);
 	err = read_body_to_string(a, tar, &acl_text, h, unconsumed);
 	if (err != ARCHIVE_OK) {
 		archive_string_free(&acl_text);
 		return (err);
 	}
+	size = archive_strlen(&acl_text);
 
 	/* TODO: Examine the first characters to see if this
 	 * is an AIX ACL descriptor.  We'll likely never support
@@ -1347,6 +1345,7 @@ header_common(struct archive_read *a, struct tar *tar,
 	const struct archive_entry_header_ustar	*header;
 	const char *existing_linkpath;
 	const wchar_t *existing_wcs_linkpath;
+	mode_t header_mode;
 	int     err = ARCHIVE_OK;
 
 	header = (const struct archive_entry_header_ustar *)h;
@@ -1354,12 +1353,10 @@ header_common(struct archive_read *a, struct tar *tar,
 	/* Parse out the numeric fields (all are octal) */
 
 	/* Split mode handling: Set filetype always, perm only if not already set */
-	archive_entry_set_filetype(entry,
-	    (mode_t)tar_atol(header->mode, sizeof(header->mode)));
-	if (!archive_entry_perm_is_set(entry)) {
-		archive_entry_set_perm(entry,
-			(mode_t)tar_atol(header->mode, sizeof(header->mode)));
-	}
+	header_mode = (mode_t)tar_atol(header->mode, sizeof(header->mode));
+	archive_entry_set_filetype(entry, header_mode);
+	if (!archive_entry_perm_is_set(entry))
+		archive_entry_set_perm(entry, header_mode);
 
 	/* Set uid, gid, mtime if not already set */
 	if (!archive_entry_uid_is_set(entry)) {
@@ -3453,13 +3450,10 @@ pax_attribute_SUN_holesdata(struct archive_read *a, struct tar *tar,
 				return (ARCHIVE_FATAL);
 			tar->sparse_last->hole = hole;
 		}
-		if (length == 0 || *e == '\n') {
-			if (length == 0 && *e == '\n') {
-				return (ARCHIVE_OK);
-			} else {
-				return (ARCHIVE_WARN);
-			}
-		}
+		if (length == 0)
+			return (ARCHIVE_OK);
+		if (*e == '\n')
+			return (ARCHIVE_WARN);
 		p = e + 1;
 		length--;
 		hole = hole == 0;
@@ -3522,17 +3516,17 @@ tar_atol_base_n(const char *p, size_t char_cnt, int base)
 	}
 
 	l = 0;
-	if (char_cnt != 0) {
+	while (char_cnt != 0) {
 		digit = *p - '0';
-		while (digit >= 0 && digit < base && char_cnt != 0) {
-			if (archive_ckd_mul_i64(&l, l, base) ||
-			    archive_ckd_add_i64(&l, l, sign * digit)) {
-				 /* Truncate on overflow. */
-				return sign < 0 ? INT64_MIN : INT64_MAX;
-			}
-			digit = *++p - '0';
-			char_cnt--;
+		if (digit < 0 || digit >= base)
+			break;
+		if (archive_ckd_mul_i64(&l, l, base) ||
+		    archive_ckd_add_i64(&l, l, sign * digit)) {
+			 /* Truncate on overflow. */
+			return sign < 0 ? INT64_MIN : INT64_MAX;
 		}
+		p++;
+		char_cnt--;
 	}
 	return l;
 }
