@@ -480,8 +480,7 @@ archive_read_support_format_7zip(struct archive *_a)
 
 	zip = calloc(1, sizeof(*zip));
 	if (zip == NULL) {
-		archive_set_error(&a->archive, ENOMEM,
-		    "Can't allocate 7zip data");
+		archive_set_error(_a, ENOMEM, "Can't allocate 7zip data");
 		return (ARCHIVE_FATAL);
 	}
 
@@ -490,7 +489,6 @@ archive_read_support_format_7zip(struct archive *_a)
 	 * any encrypted entries yet.
 	 */
 	zip->has_encrypted_entries = ARCHIVE_READ_FORMAT_ENCRYPTION_DONT_KNOW;
-
 
 	r = __archive_read_register_format(a,
 	    zip,
@@ -507,7 +505,7 @@ archive_read_support_format_7zip(struct archive *_a)
 
 	if (r != ARCHIVE_OK)
 		free(zip);
-	return (ARCHIVE_OK);
+	return (r);
 }
 
 static int
@@ -522,7 +520,7 @@ static int
 archive_read_format_7zip_has_encrypted_entries(struct archive_read *a)
 {
 	if (a && a->format) {
-		struct _7zip *zip = (struct _7zip *)a->format->data;
+		struct _7zip *zip = a->format->data;
 		if (zip) {
 			return zip->has_encrypted_entries;
 		}
@@ -896,7 +894,7 @@ static int
 archive_read_format_7zip_read_header(struct archive_read *a,
 	struct archive_entry *entry)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	struct _7zip_entry *zip_entry;
 	int r, ret = ARCHIVE_OK;
 	struct _7z_folder *folder = 0;
@@ -1097,11 +1095,9 @@ static int
 archive_read_format_7zip_read_data(struct archive_read *a,
     const void **buff, size_t *size, int64_t *offset)
 {
-	struct _7zip *zip;
+	struct _7zip *zip = a->format->data;
 	ssize_t bytes;
 	int ret = ARCHIVE_OK;
-
-	zip = (struct _7zip *)(a->format->data);
 
 	if (zip->has_encrypted_entries == ARCHIVE_READ_FORMAT_ENCRYPTION_DONT_KNOW) {
 		zip->has_encrypted_entries = 0;
@@ -1167,10 +1163,8 @@ archive_read_format_7zip_read_data(struct archive_read *a,
 static int
 archive_read_format_7zip_read_data_skip(struct archive_read *a)
 {
-	struct _7zip *zip;
+	struct _7zip *zip = a->format->data;
 	int r;
-
-	zip = (struct _7zip *)(a->format->data);
 
 	if (zip->pack_stream_bytes_unconsumed)
 		read_consume(a);
@@ -1196,9 +1190,8 @@ archive_read_format_7zip_read_data_skip(struct archive_read *a)
 static int
 archive_read_format_7zip_cleanup(struct archive_read *a)
 {
-	struct _7zip *zip;
+	struct _7zip *zip = a->format->data;
 
-	zip = (struct _7zip *)(a->format->data);
 	free_StreamsInfo(&(zip->si));
 	free(zip->entries);
 	free(zip->entry_names);
@@ -1209,14 +1202,14 @@ archive_read_format_7zip_cleanup(struct archive_read *a)
 	free(zip->sub_stream_buff[2]);
 	free(zip->tmp_stream_buff);
 	free(zip);
-	(a->format->data) = NULL;
+	a->format->data = NULL;
 	return (ARCHIVE_OK);
 }
 
 static int
 read_consume(struct archive_read *a)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 
 	if (zip->pack_stream_bytes_unconsumed) {
 		int64_t r;
@@ -1300,7 +1293,7 @@ static Byte
 ppmd_read(void *p)
 {
 	struct archive_read *a = ((IByteIn*)p)->a;
-	struct _7zip *zip = (struct _7zip *)(a->format->data);
+	struct _7zip *zip = a->format->data;
 	Byte b;
 
 	if (zip->ppstream.avail_in == 0) {
@@ -2260,7 +2253,7 @@ free_Folder(struct _7z_folder *f)
 static int
 read_Folder(struct archive_read *a, struct _7z_folder *f)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	const unsigned char *p;
 	size_t numInStreamsTotal = 0;
 	size_t numOutStreamsTotal = 0;
@@ -2406,6 +2399,7 @@ free_CodersInfo(struct _7z_coders_info *ci)
 static int
 read_CodersInfo(struct archive_read *a, struct _7z_coders_info *ci)
 {
+	struct _7zip *zip = a->format->data;
 	const unsigned char *p;
 	struct _7z_digests digest;
 	size_t dataStreamIndex, i;
@@ -2422,6 +2416,14 @@ read_CodersInfo(struct archive_read *a, struct _7z_coders_info *ci)
 	 * Read NumFolders.
 	 */
 	if (parse_7zip_size(a, &(ci->numFolders)) < 0)
+		goto failed;
+	/*
+	 * Each folder is encoded by at least one byte in the coders
+	 * list that follows, so a folder count larger than the bytes
+	 * left in the header cannot be honored and is rejected here
+	 * before it is used to size the folders allocation.
+	 */
+	if (ci->numFolders > (uint64_t)zip->header_bytes_remaining)
 		goto failed;
 
 	/*
@@ -2679,7 +2681,7 @@ free_StreamsInfo(struct _7z_stream_info *si)
 static int
 read_StreamsInfo(struct archive_read *a, struct _7z_stream_info *si)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	const unsigned char *p;
 	size_t i;
 
@@ -2781,7 +2783,7 @@ static int
 read_Header(struct archive_read *a, struct _7z_header_info *h,
     int check_header_id)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	const unsigned char *p;
 	struct _7z_folder *folders;
 	struct _7z_stream_info *si = &(zip->si);
@@ -3139,7 +3141,7 @@ read_Header(struct archive_read *a, struct _7z_header_info *h,
 static int
 read_Times(struct archive_read *a, int type)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	const unsigned char *p;
 	struct _7zip_entry *entries = zip->entries;
 	unsigned char *timeBools = NULL;
@@ -3204,7 +3206,7 @@ failed:
 static int
 decode_encoded_header_info(struct archive_read *a, struct _7z_stream_info *si)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	int64_t pi_end;
 
 	errno = 0;
@@ -3239,7 +3241,7 @@ decode_encoded_header_info(struct archive_read *a, struct _7z_stream_info *si)
 static const unsigned char *
 header_bytes(struct archive_read *a, size_t rbytes)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	const unsigned char *p;
 
 	if ((uint64_t)zip->header_bytes_remaining < rbytes)
@@ -3325,7 +3327,7 @@ slurp_central_directory(struct archive_read *a, struct _7zip *zip,
 	next_header_crc = archive_le32dec(p + 28);
 
 	if (next_header_size == 0)
-		/* There is no entry in an archive file. */
+		/* There is no entry in the archive file. */
 		return (ARCHIVE_EOF);
 
 	__archive_read_consume(a, 32);
@@ -3453,7 +3455,7 @@ static ssize_t
 get_uncompressed_data(struct archive_read *a, const void **buff, size_t size,
     size_t minimum)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	ssize_t bytes_avail;
 
 	if (zip->codec == _7Z_COPY && zip->codec2 == -1) {
@@ -3517,7 +3519,7 @@ static ssize_t
 extract_pack_stream(struct archive_read *a, size_t minimum)
 {
 	static const size_t max_decode_size = 64 * 1024 * 1024; // 64MiB
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	ssize_t bytes_avail;
 	int r;
 
@@ -3677,7 +3679,7 @@ extract_pack_stream(struct archive_read *a, size_t minimum)
 static int
 seek_pack(struct archive_read *a)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	int64_t pack_offset;
 
 	if (zip->pack_stream_remaining == 0) {
@@ -3708,7 +3710,7 @@ static ssize_t
 read_stream(struct archive_read *a, const void **buff, size_t size,
     size_t minimum)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	int64_t skip_bytes = 0;
 	ssize_t r;
 
@@ -3827,7 +3829,7 @@ static int
 setup_decode_folder(struct archive_read *a, struct _7z_folder *folder,
     int header)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	const struct _7z_coder *coder1, *coder2;
 	const char *cname = (header)?"archive header":"file content";
 	size_t i;
@@ -4095,7 +4097,7 @@ setup_decode_folder(struct archive_read *a, struct _7z_folder *folder,
 static int
 skip_stream(struct archive_read *a, int64_t skip_bytes)
 {
-	struct _7zip *zip = (struct _7zip *)a->format->data;
+	struct _7zip *zip = a->format->data;
 	const void *p;
 	int64_t skipped_bytes;
 	int64_t bytes = skip_bytes;
@@ -4187,7 +4189,7 @@ x86_Convert(struct _7zip *zip, uint8_t *data, size_t size)
 		if (p >= limit)
 			break;
 		prevPosT = bufferPos - prevPosT;
-		if (prevPosT > 3)
+		if (prevPosT == 0 || prevPosT > 3)
 			prevMask = 0;
 		else {
 			prevMask = (prevMask << ((int)prevPosT - 1)) & 0x7;

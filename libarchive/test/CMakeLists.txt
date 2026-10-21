@@ -33,6 +33,7 @@ IF(ENABLE_TEST)
     test_archive_pathmatch_oob.c
     test_archive_read.c
     test_archive_read_add_passphrase.c
+    test_archive_read_append_filter.c
     test_archive_read_close_twice.c
     test_archive_read_multiple_data_objects.c
     test_archive_read_next_header_empty.c
@@ -40,9 +41,11 @@ IF(ENABLE_TEST)
     test_archive_read_open2.c
     test_archive_read_set_options.c
     test_archive_read_support.c
+    test_archive_seek_data_unsupported.c
     test_archive_set_error.c
     test_archive_string.c
     test_archive_string_conversion.c
+    test_archive_string_conversion_overread.c
     test_archive_write_add_filter.c
     test_archive_write_add_filter_by_name.c
     test_archive_write_set_format_by_name.c
@@ -111,12 +114,14 @@ IF(ENABLE_TEST)
     test_read_format_7zip_encryption_header.c
     test_read_format_7zip_encryption_partially.c
     test_read_format_7zip_entries_oom.c
+    test_read_format_7zip_folders_oom.c
     test_read_format_7zip_issue2765.c
     test_read_format_7zip_malformed.c
     test_read_format_7zip_packinfo_digests.c
     test_read_format_ar.c
     test_read_format_cab.c
     test_read_format_cab_filename.c
+    test_read_format_cab_lzx_16bit.c
     test_read_format_cab_lzx_e8.c
     test_read_format_cab_lzx_oob.c
     test_read_format_cab_mszip_oob.c
@@ -138,6 +143,7 @@ IF(ENABLE_TEST)
     test_read_format_cpio_svr4_gzip.c
     test_read_format_cpio_svr4_gzip_rpm.c
     test_read_format_cpio_svr4c_Z.c
+    test_read_format_cpio_symlink_trailer.c
     test_read_format_empty.c
     test_read_format_gtar_filename.c
     test_read_format_gtar_gz.c
@@ -199,6 +205,7 @@ IF(ENABLE_TEST)
     test_read_format_tar_pax_g_large.c
     test_read_format_tar_pax_large_attr.c
     test_read_format_tar_pax_negative_time.c
+    test_read_format_tar_pax_sun_holesdata.c
     test_read_format_tar_pax_timestamps.c
     test_read_format_tar_timestamp_overflow.c
     test_read_format_tbz.c
@@ -297,12 +304,14 @@ IF(ENABLE_TEST)
     test_write_format_cpio_odc.c
     test_write_format_gnutar.c
     test_write_format_gnutar_filenames.c
+    test_write_format_gnutar_huge.c
     test_write_format_iso9660.c
     test_write_format_iso9660_boot.c
     test_write_format_iso9660_empty.c
     test_write_format_iso9660_filename.c
     test_write_format_iso9660_joliet_id.c
     test_write_format_iso9660_rockridge.c
+    test_write_format_iso9660_rockridge_overflow.c
     test_write_format_iso9660_zisofs.c
     test_write_format_iso9660_zisofs_overflow.c
     test_write_format_iso9660_bugs.c
@@ -318,6 +327,7 @@ IF(ENABLE_TEST)
     test_write_format_mtree_quoted_filename.c
     test_write_format_mtree_null_deref.c
     test_write_format_pax.c
+    test_write_format_pax_align.c
     test_write_format_raw.c
     test_write_format_raw_b64.c
     test_write_format_shar_empty.c

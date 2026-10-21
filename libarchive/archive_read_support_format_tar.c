@@ -272,8 +272,7 @@ archive_read_support_format_tar(struct archive *_a)
 
 	tar = calloc(1, sizeof(*tar));
 	if (tar == NULL) {
-		archive_set_error(&a->archive, ENOMEM,
-		    "Can't allocate tar data");
+		archive_set_error(_a, ENOMEM, "Can't allocate tar data");
 		return (ARCHIVE_FATAL);
 	}
 #ifdef HAVE_COPYFILE_H
@@ -281,7 +280,9 @@ archive_read_support_format_tar(struct archive *_a)
 	tar->process_mac_extensions = 1;
 #endif
 
-	r = __archive_read_register_format(a, tar, "tar",
+	r = __archive_read_register_format(a,
+	    tar,
+	    "tar",
 	    archive_read_format_tar_bid,
 	    archive_read_format_tar_options,
 	    archive_read_format_tar_read_header,
@@ -294,15 +295,14 @@ archive_read_support_format_tar(struct archive *_a)
 
 	if (r != ARCHIVE_OK)
 		free(tar);
-	return (ARCHIVE_OK);
+	return (r);
 }
 
 static int
 archive_read_format_tar_cleanup(struct archive_read *a)
 {
-	struct tar *tar;
+	struct tar *tar = a->format->data;
 
-	tar = (struct tar *)(a->format->data);
 	gnu_clear_sparse_list(tar);
 	archive_string_free(&tar->entry_pathname);
 	archive_string_free(&tar->entry_pathname_override);
@@ -312,7 +312,7 @@ archive_read_format_tar_cleanup(struct archive_read *a)
 	archive_string_free(&tar->line);
 	archive_string_free(&tar->localname);
 	free(tar);
-	(a->format->data) = NULL;
+	a->format->data = NULL;
 	return (ARCHIVE_OK);
 }
 
@@ -439,10 +439,9 @@ static int
 archive_read_format_tar_options(struct archive_read *a,
     const char *key, const char *val)
 {
-	struct tar *tar;
+	struct tar *tar = a->format->data;
 	int ret = ARCHIVE_FAILED;
 
-	tar = (struct tar *)(a->format->data);
 	if (strcmp(key, "compat-2x")  == 0) {
 		/* Handle UTF-8 filenames as libarchive 2.x */
 		tar->compat_2x = (val != NULL && val[0] != 0);
@@ -525,14 +524,12 @@ archive_read_format_tar_read_header(struct archive_read *a,
 	 * probably not worthwhile just to support the relatively
 	 * obscure tar->cpio conversion case.
 	 */
-	struct tar *tar;
+	struct tar *tar = a->format->data;
 	const char *p;
 	const wchar_t *wp;
 	int r;
 	size_t l;
 	int64_t unconsumed = 0;
-
-	tar = (struct tar *)(a->format->data);
 
 	/* Assign default device/inode values. */
 	archive_entry_set_dev(entry, 1 + tar->default_dev); /* Don't use zero. */
@@ -609,11 +606,9 @@ static int
 archive_read_format_tar_read_data(struct archive_read *a,
     const void **buff, size_t *size, int64_t *offset)
 {
+	struct tar *tar = a->format->data;
 	ssize_t bytes_read;
-	struct tar *tar;
 	struct sparse_block *p;
-
-	tar = (struct tar *)(a->format->data);
 
 	for (;;) {
 		/* Remove exhausted entries from sparse list. */
@@ -673,10 +668,8 @@ archive_read_format_tar_read_data(struct archive_read *a,
 static int
 archive_read_format_tar_skip(struct archive_read *a)
 {
+	struct tar *tar = a->format->data;
 	int64_t request;
-	struct tar* tar;
-
-	tar = (struct tar *)(a->format->data);
 
 	request = tar->entry_bytes_remaining + tar->entry_padding +
 	    tar->entry_bytes_unconsumed;
@@ -1646,24 +1639,9 @@ is_mac_metadata_entry(struct archive_entry *entry) {
 	const char *p, *name;
 	const wchar_t *wp, *wname;
 
-	wname = wp = archive_entry_pathname_w(entry);
-	if (wp != NULL) {
+	name = p = archive_entry_pathname(entry);
+	if (p != NULL) {
 		/* Find the last path element. */
-		for (; *wp != L'\0'; ++wp) {
-			if (wp[0] == '/' && wp[1] != L'\0')
-				wname = wp + 1;
-		}
-		/*
-		 * If last path element starts with "._", then
-		 * this is a Mac extension.
-		 */
-		if (wname[0] == L'.' && wname[1] == L'_' && wname[2] != L'\0')
-			return 1;
-	} else {
-		/* Find the last path element. */
-		name = p = archive_entry_pathname(entry);
-		if (p == NULL)
-			return (ARCHIVE_FAILED);
 		for (; *p != '\0'; ++p) {
 			if (p[0] == '/' && p[1] != '\0')
 				name = p + 1;
@@ -1673,6 +1651,21 @@ is_mac_metadata_entry(struct archive_entry *entry) {
 		 * this is a Mac extension.
 		 */
 		if (name[0] == '.' && name[1] == '_' && name[2] != '\0')
+			return 1;
+	} else {
+		/* Find the last path element. */
+		wname = wp = archive_entry_pathname_w(entry);
+		if (wp == NULL)
+			return 0;
+		for (; *wp != L'\0'; ++wp) {
+			if (wp[0] == L'/' && wp[1] != L'\0')
+				wname = wp + 1;
+		}
+		/*
+		 * If last path element starts with "._", then
+		 * this is a Mac extension.
+		 */
+		if (wname[0] == L'.' && wname[1] == L'_' && wname[2] != L'\0')
 			return 1;
 	}
 	/* Not a mac extension */
@@ -3037,6 +3030,7 @@ static int
 header_gnutar(struct archive_read *a, struct tar *tar,
     struct archive_entry *entry, const void *h, int64_t *unconsumed)
 {
+	struct archive_entry_header_gnutar header_copy;
 	const struct archive_entry_header_gnutar *header;
 	int64_t t;
 	int err = ARCHIVE_OK;
@@ -3047,8 +3041,14 @@ header_gnutar(struct archive_read *a, struct tar *tar,
 	 * filename is stored as in old-style archives.
 	 */
 
+	/*
+	 * Sparse extension reads can reuse the callback buffer containing h,
+	 * so preserve the main header until common fields are parsed.
+	 */
+	memcpy(&header_copy, h, sizeof(header_copy));
+	header = &header_copy;
+
 	/* Copy filename over (to ensure null termination). */
-	header = (const struct archive_entry_header_gnutar *)h;
 	const char *existing_pathname = archive_entry_pathname(entry);
 	const wchar_t *existing_wcs_pathname = archive_entry_pathname_w(entry);
 	if ((existing_pathname == NULL || existing_pathname[0] == '\0')
@@ -3127,7 +3127,7 @@ header_gnutar(struct archive_read *a, struct tar *tar,
 	}
 
 	/* Grab fields common to all tar variants. */
-	err = header_common(a, tar, entry, h);
+	err = header_common(a, tar, entry, header);
 	if (err == ARCHIVE_FATAL)
 		return (err);
 

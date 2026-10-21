@@ -445,11 +445,13 @@ static const char *
 default_iconv_charset(const char *charset) {
 	if (charset != NULL && charset[0] != '\0')
 		return charset;
-#if HAVE_LOCALE_CHARSET && !defined(__APPLE__)
+#if HAVE_LOCALE_CHARSET && HAVE_LOCALCHARSET_H && !defined(__APPLE__)
 	/* locale_charset() is broken on Mac OS */
 	return locale_charset();
 #elif HAVE_NL_LANGINFO
 	return nl_langinfo(CODESET);
+#elif defined(__BIONIC__)
+	return "UTF-8";
 #else
 	return "";
 #endif
@@ -2325,7 +2327,7 @@ best_effort_strncat_in_locale(struct archive_string *as, const void *_p,
 
 	remaining = length;
 	itp = (const uint8_t *)_p;
-	while (*itp && remaining > 0) {
+	while (remaining > 0 && *itp) {
 		if (*itp > 127) {
 			// Non-ASCII: Substitute with suitable replacement
 			if (sc->flag & SCONV_TO_UTF8) {
@@ -2340,6 +2342,7 @@ best_effort_strncat_in_locale(struct archive_string *as, const void *_p,
 			archive_strappend_char(as, *itp);
 		}
 		++itp;
+		--remaining;
 	}
 	return (return_value);
 }

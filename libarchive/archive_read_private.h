@@ -68,18 +68,16 @@ struct archive_read_filter_bidder_vtable {
 struct archive_read_filter_bidder {
 	/* Configuration data for the bidder. */
 	void *data;
-	/* Name of the filter */
-	const char *name;
 	const struct archive_read_filter_bidder_vtable *vtable;
 };
 
 struct archive_read_filter_vtable {
 	/* Return next block. */
 	ssize_t (*read)(struct archive_read_filter *, const void **);
-	/* Close (just this filter) and free(self). */
-	int (*close)(struct archive_read_filter *self);
+	/* Close (just this filter) and free(filter). */
+	int (*close)(struct archive_read_filter *);
 	/* Read any header metadata if available. */
-	int (*read_header)(struct archive_read_filter *self, struct archive_entry *entry);
+	int (*read_header)(struct archive_read_filter *, struct archive_entry *);
 };
 
 /*
@@ -250,7 +248,6 @@ int	__archive_read_register_format(struct archive_read *a,
 
 int __archive_read_register_bidder(struct archive_read *a,
 		void *bidder_data,
-		const char *name,
 		const struct archive_read_filter_bidder_vtable *vtable);
 
 const void *__archive_read_ahead(struct archive_read *, size_t, ssize_t *);

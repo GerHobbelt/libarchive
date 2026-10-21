@@ -297,7 +297,7 @@ static Byte
 ppmd_read(void* p) {
 	/* Get the handle to current decompression context. */
 	struct archive_read *a = ((IByteIn*)p)->a;
-	struct zip *zip = (struct zip*) a->format->data;
+	struct zip *zip = a->format->data;
 
 	/* Fetch next byte. */
 	const uint8_t* data = __archive_read_ahead(a, 1, NULL);
@@ -443,7 +443,7 @@ static int
 zipx_read_header_and_decrypt(struct archive_read *a, const void **buf, size_t in_len,
     size_t *out_len, size_t *consumed)
 {
-	struct zip *zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 	const void *raw;
 	ssize_t bytes_avail;
 	size_t to_decrypt;
@@ -662,8 +662,8 @@ static int
 process_extra(struct archive_read *a, struct archive_entry *entry,
      const char *p, size_t extra_length, struct zip_entry* zip_entry)
 {
+	struct zip *zip = a->format->data;
 	unsigned offset = 0;
-	struct zip *zip = (struct zip *)(a->format->data);
 
 	if (extra_length == 0) {
 		return ARCHIVE_OK;
@@ -1511,7 +1511,7 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 static int
 check_authentication_code(struct archive_read *a, const void *_p)
 {
-	struct zip *zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 
 	/* Check authentication code. */
 	if (zip->hctx_valid) {
@@ -1835,7 +1835,7 @@ static int
 zip_read_data_none(struct archive_read *a, const void **_buff,
     size_t *size, int64_t *offset)
 {
-	struct zip *zip;
+	struct zip *zip = a->format->data;
 	const char *buff;
 	ssize_t bytes_avail;
 	ssize_t trailing_extra;
@@ -1843,7 +1843,6 @@ zip_read_data_none(struct archive_read *a, const void **_buff,
 
 	(void)offset; /* UNUSED */
 
-	zip = (struct zip *)(a->format->data);
 	trailing_extra = zip->hctx_valid ? AUTH_CODE_SIZE : 0;
 
 	if (zip->entry->zip_flags & ZIP_LENGTH_AT_END) {
@@ -2154,7 +2153,7 @@ static int
 zip_read_data_zipx_xz(struct archive_read *a, const void **buff,
 	size_t *size, int64_t *offset)
 {
-	struct zip* zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 	int ret;
 	lzma_ret lz_ret;
 	const void* compressed_buf;
@@ -2254,7 +2253,7 @@ static int
 zip_read_data_zipx_lzma_alone(struct archive_read *a, const void **buff,
     size_t *size, int64_t *offset)
 {
-	struct zip* zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 	int ret;
 	lzma_ret lz_ret;
 	const void* compressed_buf;
@@ -2524,7 +2523,7 @@ static int
 zip_read_data_zipx_ppmd(struct archive_read *a, const void **buff,
     size_t *size, int64_t *offset)
 {
-	struct zip* zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 	int ret;
 	size_t consumed_bytes = 0;
 
@@ -2643,7 +2642,7 @@ static int
 zip_read_data_zipx_bzip2(struct archive_read *a, const void **buff,
     size_t *size, int64_t *offset)
 {
-	struct zip *zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 	ssize_t bytes_avail = 0, to_consume;
 	const void *compressed_buff;
 	const void *sp;
@@ -2795,7 +2794,7 @@ static int
 zip_read_data_zipx_zstd(struct archive_read *a, const void **buff,
     size_t *size, int64_t *offset)
 {
-	struct zip *zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 	ssize_t bytes_avail = 0, to_consume;
 	const void *compressed_buff;
 	const void *sp;
@@ -2917,7 +2916,7 @@ static int
 zip_read_data_deflate(struct archive_read *a, const void **buff,
     size_t *size, int64_t *offset)
 {
-	struct zip *zip;
+	struct zip *zip = a->format->data;
 	ssize_t bytes_avail, to_consume = 0;
 	const void *compressed_buff;
 	const void *sp;
@@ -2925,8 +2924,6 @@ zip_read_data_deflate(struct archive_read *a, const void **buff,
 	static const ssize_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 
 	(void)offset; /* UNUSED */
-
-	zip = (struct zip *)(a->format->data);
 
 	/* If the buffer hasn't been allocated, allocate it now. */
 	if (zip->uncompressed_buffer == NULL) {
@@ -3022,7 +3019,7 @@ zip_read_data_deflate(struct archive_read *a, const void **buff,
 static int
 read_decryption_header(struct archive_read *a)
 {
-	struct zip *zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 	const char *p;
 	unsigned int remaining_size;
 	unsigned int ts;
@@ -3216,7 +3213,7 @@ nomem:
 static int
 zip_alloc_decryption_buffer(struct archive_read *a)
 {
-	struct zip *zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 	size_t bs = 256 * 1024;
 
 	if (zip->decrypted_buffer == NULL) {
@@ -3235,7 +3232,7 @@ zip_alloc_decryption_buffer(struct archive_read *a)
 static int
 init_traditional_PKWARE_decryption(struct archive_read *a)
 {
-	struct zip *zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 	const void *p;
 	int retry;
 	int r;
@@ -3307,7 +3304,7 @@ init_traditional_PKWARE_decryption(struct archive_read *a)
 static int
 init_WinZip_AES_decryption(struct archive_read *a)
 {
-	struct zip *zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 	const void *p;
 	const uint8_t *pv;
 	size_t key_len, salt_len;
@@ -3401,8 +3398,8 @@ static int
 archive_read_format_zip_read_data(struct archive_read *a,
     const void **buff, size_t *size, int64_t *offset)
 {
+	struct zip *zip = a->format->data;
 	int r;
-	struct zip *zip = (struct zip *)(a->format->data);
 
 	if (zip->has_encrypted_entries ==
 			ARCHIVE_READ_FORMAT_ENCRYPTION_DONT_KNOW) {
@@ -3546,10 +3543,8 @@ archive_read_format_zip_read_data(struct archive_read *a,
 static int
 archive_read_format_zip_cleanup(struct archive_read *a)
 {
-	struct zip *zip;
+	struct zip *zip = a->format->data;
 	struct zip_entry *zip_entry, *next_zip_entry;
-
-	zip = (struct zip *)(a->format->data);
 
 #ifdef HAVE_ZLIB_H
 	if (zip->stream_valid)
@@ -3598,7 +3593,7 @@ archive_read_format_zip_cleanup(struct archive_read *a)
 	free(zip->v_data);
 	archive_string_free(&zip->format_name);
 	free(zip);
-	(a->format->data) = NULL;
+	a->format->data = NULL;
 	return (ARCHIVE_OK);
 }
 
@@ -3606,7 +3601,7 @@ static int
 archive_read_format_zip_has_encrypted_entries(struct archive_read *_a)
 {
 	if (_a && _a->format) {
-		struct zip * zip = (struct zip *)_a->format->data;
+		struct zip *zip = _a->format->data;
 		if (zip) {
 			return zip->has_encrypted_entries;
 		}
@@ -3618,10 +3613,9 @@ static int
 archive_read_format_zip_options(struct archive_read *a,
     const char *key, const char *val)
 {
-	struct zip *zip;
+	struct zip *zip = a->format->data;
 	int ret = ARCHIVE_FAILED;
 
-	zip = (struct zip *)(a->format->data);
 	if (strcmp(key, "compat-2x")  == 0) {
 		/* Handle filenames as libarchive 2.x */
 		zip->init_default_conversion = (val != NULL) ? 1 : 0;
@@ -3728,13 +3722,11 @@ static int
 archive_read_format_zip_streamable_read_header(struct archive_read *a,
     struct archive_entry *entry)
 {
-	struct zip *zip;
+	struct zip *zip = a->format->data;
 
 	a->archive.archive_format = ARCHIVE_FORMAT_ZIP;
 	if (a->archive.archive_format_name == NULL)
 		a->archive.archive_format_name = "ZIP";
-
-	zip = (struct zip *)(a->format->data);
 
 	/*
 	 * It should be sufficient to call archive_read_next_header() for
@@ -3821,10 +3813,9 @@ archive_read_format_zip_streamable_read_header(struct archive_read *a,
 static int
 archive_read_format_zip_read_data_skip_streamable(struct archive_read *a)
 {
-	struct zip *zip;
+	struct zip *zip = a->format->data;
 	int64_t bytes_skipped;
 
-	zip = (struct zip *)(a->format->data);
 	bytes_skipped = __archive_read_consume(a, zip->unconsumed);
 	zip->unconsumed = 0;
 	if (bytes_skipped < 0)
@@ -3922,8 +3913,7 @@ archive_read_support_format_zip_streamable(struct archive *_a)
 
 	zip = calloc(1, sizeof(*zip));
 	if (zip == NULL) {
-		archive_set_error(&a->archive, ENOMEM,
-		    "Can't allocate zip data");
+		archive_set_error(_a, ENOMEM, "Can't allocate zip data");
 		return (ARCHIVE_FATAL);
 	}
 
@@ -3952,7 +3942,7 @@ archive_read_support_format_zip_streamable(struct archive *_a)
 
 	if (r != ARCHIVE_OK)
 		free(zip);
-	return (ARCHIVE_OK);
+	return (r);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -4066,7 +4056,7 @@ read_zip64_eocd(struct archive_read *a, struct zip *zip, const char *p)
 static int
 archive_read_format_zip_seekable_bid(struct archive_read *a, int best_bid)
 {
-	struct zip *zip = (struct zip *)a->format->data;
+	struct zip *zip = a->format->data;
 	int64_t file_size, current_offset;
 	const char *p;
 	int i, tail;
@@ -4464,7 +4454,7 @@ static int
 zip_read_mac_metadata(struct archive_read *a, struct archive_entry *entry,
     struct zip_entry *rsrc)
 {
-	struct zip *zip = (struct zip *)a->format->data;
+	struct zip *zip = a->format->data;
 	unsigned char *metadata, *mp;
 	int64_t offset = archive_filter_bytes(&a->archive, 0);
 	size_t remaining_bytes, metadata_bytes;
@@ -4618,7 +4608,7 @@ static int
 archive_read_format_zip_seekable_read_header(struct archive_read *a,
 	struct archive_entry *entry)
 {
-	struct zip *zip = (struct zip *)a->format->data;
+	struct zip *zip = a->format->data;
 	struct zip_entry *rsrc;
 	int64_t offset;
 	int r, ret = ARCHIVE_OK;
@@ -4698,8 +4688,7 @@ archive_read_format_zip_seekable_read_header(struct archive_read *a,
 static int
 archive_read_format_zip_read_data_skip_seekable(struct archive_read *a)
 {
-	struct zip *zip;
-	zip = (struct zip *)(a->format->data);
+	struct zip *zip = a->format->data;
 
 	zip->unconsumed = 0;
 	return (ARCHIVE_OK);
@@ -4749,7 +4738,7 @@ archive_read_support_format_zip_seekable(struct archive *_a)
 
 	if (r != ARCHIVE_OK)
 		free(zip);
-	return (ARCHIVE_OK);
+	return (r);
 }
 
 /*# vim:set noet:*/

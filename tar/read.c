@@ -58,6 +58,7 @@
 
 #include "bsdtar.h"
 #include "lafe_err.h"
+#include "lafe_setmode.h"
 
 struct progress_data {
 	struct bsdtar *bsdtar;
@@ -121,16 +122,16 @@ progress_func(void *cookie)
 		else
 			compression = (int)((uncomp - comp) * 100 / uncomp);
 		fprintf(stderr,
-		    "In: %s bytes, compression %d%%;",
-		    tar_i64toa(comp), compression);
-		fprintf(stderr, "  Out: %d files, %s bytes\n",
-		    archive_file_count(a), tar_i64toa(uncomp));
+		    "In: %ju bytes, compression %d%%;",
+		    (uintmax_t)comp, compression);
+		fprintf(stderr, "  Out: %d files, %ju bytes\n",
+		    archive_file_count(a), (uintmax_t)uncomp);
 	}
 	if (entry != NULL) {
 		safe_fprintf(stderr, "Current: %s",
 		    archive_entry_pathname(entry));
-		fprintf(stderr, " (%s bytes)\n",
-		    tar_i64toa(archive_entry_size(entry)));
+		fprintf(stderr, " (%jd bytes)\n",
+		    (intmax_t)archive_entry_size(entry));
 	}
 }
 
@@ -277,6 +278,12 @@ read_archive(struct bsdtar *bsdtar, char mode, struct archive *writer)
 			archive_entry_set_uname(entry, bsdtar->uname);
 		if (bsdtar->gname)
 			archive_entry_set_gname(entry, bsdtar->gname);
+
+		if (bsdtar->file_mode) {
+			mode_t m = archive_entry_mode(entry);
+			m = lafe_getmode(bsdtar->file_mode, m);
+			archive_entry_set_mode(entry, m);
+		}
 
 		/*
 		 * Note that pattern exclusions are checked before
