@@ -107,7 +107,7 @@ AS_IF([test $inc_windows_files = yes], [AC_CHECK_TOOL([WINDRES], [windres])])
 dnl Defines that are required for specific platforms (e.g. -D_POSIX_SOURCE, etc)
 PLATFORMCPPFLAGS=
 case "$host_os" in
-  *mingw* ) PLATFORMCPPFLAGS="-D__USE_MINGW_ANSI_STDIO -D__MINGW_USE_VC2005_COMPAT" ;;
+  *mingw* ) PLATFORMCPPFLAGS="-D__USE_MINGW_ANSI_STDIO=1 -D__MINGW_USE_VC2005_COMPAT=1" ;;
 esac
 AC_SUBST(PLATFORMCPPFLAGS)
 
@@ -885,6 +885,7 @@ AC_CHECK_STDCALL_FUNC([CreateHardLinkA],[const char *, const char *, void *])
 AC_CHECK_FUNCS(m4_flatten([
 	arc4random_buf
 	chflags chown chroot closefrom close_range ctime_r
+	explicit_bzero
 	fchdir fchflags fchmod fchown fcntl fdopendir fnmatch fork
 	fstat fstatat fstatfs fstatvfs ftruncate
 	futimens futimes futimesat
@@ -893,7 +894,7 @@ AC_CHECK_FUNCS(m4_flatten([
 	gettimeofday getvfsbyname gmtime_r
 	issetugid
 	lchflags lchmod lchown link linkat localtime_r lstat lutimes
-	mbrtowc memmove memset mkdir mkfifo mknod mkstemp
+	mbrtowc memmove memset memset_explicit mkdir mkfifo mknod mkstemp
 	nl_langinfo
 	openat
 	pipe poll posix_spawn posix_spawnp

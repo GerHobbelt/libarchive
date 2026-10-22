@@ -182,6 +182,7 @@ jobs:
     - name: Distcheck
       run: ./build/ci/build.sh -a distcheck
       env:
+        CTEST_OUTPUT_ON_FAILURE: ON
         SKIP_OPEN_FD_ERR_TEST: 1
     - name: Dist-Artifact
       run: ./build/ci/build.sh -a dist-artifact
@@ -195,7 +196,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        be: [mingw-gcc, cygwin-gcc, msvc]
+        be: [cygwin-gcc, msvc]
+        include:
+          - { be: mingw, msystem: mingw64 }
+          - { be: mingw, msystem: ucrt64 }
+          - { be: mingw, msystem: clang64 }
+    env:
+      MSYSTEM: ${{ matrix.msystem }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Install Cygwin
@@ -210,21 +217,23 @@ jobs:
           liblz4-devel libiconv-devel libxml2-devel
           libzstd-devel libssl-devel
     - name: Install MinGW (msys2)
-      uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
-      if:  ${{ matrix.be=='mingw-gcc' }}
+      uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+      if:  ${{ matrix.be=='mingw' }}
       with:
         location: "D:\\"
-        install: |-
-          mingw-w64-x86_64-gcc
-          mingw-w64-x86_64-autotools
-          mingw-w64-x86_64-binutils
-          mingw-w64-x86_64-pkgconf
-          mingw-w64-x86_64-cmake
-          mingw-w64-x86_64-make
-          mingw-w64-x86_64-zlib
-          mingw-w64-x86_64-bzip2
-          mingw-w64-x86_64-xz
-          mingw-w64-x86_64-zstd
+        suppress-deprecation-warnings: msystem-mingw64
+        msystem: ${{ matrix.msystem }}
+        pacboy: |-
+          gcc:p
+          autotools:p
+          binutils:p
+          pkgconf:p
+          cmake:p
+          make:p
+          zlib:p
+          bzip2:p
+          xz:p
+          zstd:p
     - name: Configure
       run: ./build/ci/github_actions/ci.cmd configure
       shell: cmd
@@ -253,5 +262,7 @@ jobs:
         BE: ${{ matrix.be }}
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: libarchive-windows-${{ matrix.be }}-${{ github.sha }}
+        # for msvc and cygwin, libarchive-windows-backend-arch
+        # for mingw, libarchive-windows-mingw-msystem-arch
+        name: libarchive-windows-${{ matrix.be }}${{ matrix.be=='mingw' && format('-{0}', matrix.msystem) || '' }}-${{ github.sha }}
         path: ${{ matrix.be=='cygwin-gcc' && 'libarchive.tar.xz' || 'libarchive.zip' }}

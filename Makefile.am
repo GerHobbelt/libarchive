@@ -628,6 +628,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_zip_filename.c \
 	libarchive/test/test_read_format_zip_high_compression.c \
 	libarchive/test/test_read_format_zip_jar.c \
+	libarchive/test/test_read_format_zip_lzma_alone_large_size.c \
 	libarchive/test/test_read_format_zip_mac_metadata.c \
 	libarchive/test/test_read_format_zip_malformed.c \
 	libarchive/test/test_read_format_zip_msdos.c \
@@ -1214,6 +1215,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_zip_high_compression.zip.uu \
 	libarchive/test/test_read_format_zip_length_at_end.zip.uu \
 	libarchive/test/test_read_format_zip_lzma.zipx.uu \
+	libarchive/test/test_read_format_zip_lzma_alone_large_size.zip.uu \
 	libarchive/test/test_read_format_zip_lzma_alone_leak.zipx.uu \
 	libarchive/test/test_read_format_zip_lzma_multi.zipx.uu \
 	libarchive/test/test_read_format_zip_lzma_stream_end.zipx.uu \
@@ -1291,6 +1293,7 @@ libarchive_test_EXTRA_DIST=\
 #
 noinst_HEADERS+= \
 	libarchive_fe/lafe_err.h \
+	libarchive_fe/lafe_explicit_bzero.h \
 	libarchive_fe/lafe_fnmatch.h \
 	libarchive_fe/lafe_getline.h \
 	libarchive_fe/lafe_platform.h \
@@ -1299,6 +1302,7 @@ noinst_HEADERS+= \
 	libarchive_fe/passphrase.h
 libarchive_fe_la_SOURCES= \
 	libarchive_fe/lafe_err.c \
+	libarchive_fe/lafe_explicit_bzero.c \
 	libarchive_fe/lafe_fnmatch.c \
 	libarchive_fe/lafe_getline.c \
 	libarchive_fe/lafe_setmode.c \

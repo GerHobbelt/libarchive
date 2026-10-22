@@ -9,6 +9,7 @@
 #include "bsdunzip_platform.h"
 
 #include "la_queue.h"
+#include "lafe_explicit_bzero.h"
 #include "lafe_fnmatch.h"
 #include "lafe_getline.h"
 #ifdef HAVE_SYS_STAT_H
@@ -1139,10 +1140,11 @@ unzip(const char *fn)
 		}
 	}
 
-	ac(archive_read_free(a));
+	ac(archive_read_close(a));
+	archive_read_free(a);
 
 	if (passphrase_buf != NULL) {
-		memset(passphrase_buf, 0, PPBUFF_SIZE);
+		explicit_bzero(passphrase_buf, PPBUFF_SIZE);
 		free(passphrase_buf);
 	}
 

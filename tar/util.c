@@ -43,6 +43,7 @@
 #include <inttypes.h>
 
 #include "bsdtar.h"
+#include "lafe_explicit_bzero.h"
 #include "lafe_err.h"
 #include "passphrase.h"
 
@@ -679,7 +680,7 @@ void
 passphrase_free(char *ppbuff)
 {
 	if (ppbuff != NULL) {
-		memset(ppbuff, 0, PPBUFF_SIZE);
+		explicit_bzero(ppbuff, PPBUFF_SIZE);
 		free(ppbuff);
 	}
 }
