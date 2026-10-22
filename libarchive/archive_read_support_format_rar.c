@@ -330,7 +330,6 @@ struct rar
   unsigned int unp_buffer_size;
   unsigned char *unp_buffer;
   unsigned int dictionary_size;
-  char start_new_block;
   char entry_eof;
   unsigned long crc_calculated;
   int found_first_header;
@@ -2999,7 +2998,6 @@ expand(struct archive_read *a, int64_t *end)
 
       if(newfile)
       {
-        rar->start_new_block = 1;
         if (!rar_br_read_ahead(a, br, 1))
           goto truncated_data;
         rar->start_new_table = rar_br_bits(br, 1);

@@ -82,8 +82,6 @@
 #endif
 
 struct name_cache {
-	int	probes;
-	int	hits;
 	size_t	size;
 	struct {
 		id_t id;
@@ -1419,12 +1417,10 @@ lookup_name(struct cpio *cpio, struct name_cache **name_cache_variable,
 	}
 
 	cache = *name_cache_variable;
-	cache->probes++;
 
 	slot = id % cache->size;
 	if (cache->cache[slot].name != NULL) {
 		if (cache->cache[slot].id == id) {
-			cache->hits++;
 			return (cache->cache[slot].name);
 		}
 		free(cache->cache[slot].name);
