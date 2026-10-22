@@ -715,6 +715,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_write_format_gnutar_huge.c \
 	libarchive/test/test_write_format_iso9660.c \
 	libarchive/test/test_write_format_iso9660_boot.c \
+	libarchive/test/test_write_format_iso9660_boot_load_size.c \
 	libarchive/test/test_write_format_iso9660_bugs.c \
 	libarchive/test/test_write_format_iso9660_empty.c \
 	libarchive/test/test_write_format_iso9660_filename.c \
@@ -735,6 +736,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_write_format_mtree_preset_digests.c \
 	libarchive/test/test_write_format_mtree_quoted_filename.c\
 	libarchive/test/test_write_format_mtree_null_deref.c \
+	libarchive/test/test_write_format_option_missing_value.c \
 	libarchive/test/test_write_format_pax.c \
 	libarchive/test/test_write_format_pax_align.c \
 	libarchive/test/test_write_format_pax_mac_meta.c \
@@ -1394,6 +1396,7 @@ bsdtar_test_SOURCES= \
 	tar/test/test_0.c \
 	tar/test/test_basic.c \
 	tar/test/test_copy.c \
+	tar/test/test_copy_data_warning.c \
 	tar/test/test_crlf_mtree.c \
 	tar/test/test_empty_mtree.c \
 	tar/test/test_extract_tar_Z.c \
@@ -1488,6 +1491,7 @@ endif
 
 bsdtar_test_EXTRA_DIST= \
 	tar/test/list.h \
+	tar/test/test_copy_data_warning.lzh.uu \
 	tar/test/test_extract.tar.Z.uu \
 	tar/test/test_extract.tar.bz2.uu \
 	tar/test/test_extract.tar.grz.uu \
