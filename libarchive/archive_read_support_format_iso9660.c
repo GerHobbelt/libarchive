@@ -1516,8 +1516,7 @@ zisofs_read_data(struct archive_read *a,
 		if (zisofs->block_pointers_alloc < xsize) {
 			size_t alloc;
 
-			if (zisofs->block_pointers != NULL)
-				free(zisofs->block_pointers);
+			free(zisofs->block_pointers);
 			alloc = ((xsize >> 10) + 1) << 10;
 			zisofs->block_pointers = malloc(alloc);
 			if (zisofs->block_pointers == NULL) {
@@ -1532,8 +1531,7 @@ zisofs_read_data(struct archive_read *a,
 		/* Allocate uncompressed data buffer. */
 		xsize = (size_t)1UL << zisofs->pz_log2_bs;
 		if (zisofs->uncompressed_buffer_size < xsize) {
-			if (zisofs->uncompressed_buffer != NULL)
-				free(zisofs->uncompressed_buffer);
+			free(zisofs->uncompressed_buffer);
 			zisofs->uncompressed_buffer = malloc(xsize);
 			if (zisofs->uncompressed_buffer == NULL) {
 				archive_set_error(&a->archive, ENOMEM,
@@ -3062,14 +3060,28 @@ re_get_entry(struct iso9660 *iso9660)
 static inline int
 rede_add_entry(struct file_info *file)
 {
-	struct file_info *re;
+	struct file_info *re, *slow;
+	int slow_turn = 0;
 
 	/*
 	 * Find "RE" entry.
+	 *
+	 * A malformed image can chain "CL"/"RE" reparenting so that the
+	 * parent pointers form a cycle in which no node carries the "re"
+	 * flag.  Advance a second pointer at half speed (Floyd's cycle
+	 * detection) so such a loop is reported as a malformed archive
+	 * instead of spinning forever.
 	 */
-	re = file->parent;
-	while (re != NULL && !re->re)
+	re = slow = file->parent;
+	while (re != NULL && !re->re) {
 		re = re->parent;
+		if (slow_turn) {
+			slow = slow->parent;
+			if (re == slow)
+				return (-1);	/* Cyclic parent chain. */
+		}
+		slow_turn = !slow_turn;
+	}
 	if (re == NULL)
 		return (-1);
 

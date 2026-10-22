@@ -1870,7 +1870,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
 static time_t
 get_time(int ttime)
 {
-  struct tm tm = { };
+  struct tm tm = { 0 };
   tm.tm_sec = 2 * (ttime & 0x1f);
   tm.tm_min = (ttime >> 5) & 0x3f;
   tm.tm_hour = (ttime >> 11) & 0x1f;
@@ -3481,8 +3481,11 @@ run_filters(struct archive_read *a)
   if (tend < 0)
     return 0;
   end = (size_t)tend;
-  if (end != start + filter->blocklength)
+  if (end != start + filter->blocklength) {
+    archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
+      "Bad RAR file data: filter block was not fully decompressed");
     return 0;
+  }
 
   if (!filters->vm)
   {

@@ -416,7 +416,7 @@ static int cdeque_init(struct cdeque* d, int max_capacity_power_of_2) {
 		return CDE_PARAM;
 
 	cdeque_clear(d);
-	d->arr = malloc(sizeof(void*) * max_capacity_power_of_2);
+	d->arr = malloc(sizeof(size_t*) * max_capacity_power_of_2);
 
 	return d->arr ? CDE_OK : CDE_ALLOC;
 }
@@ -1696,6 +1696,12 @@ static int process_head_file_extra(struct archive_read* a,
 				/* fallthrough */
 			default:
 				/* Skip unsupported entry. */
+				if (extra_field_size > (uint64_t)extra_data_size) {
+					archive_set_error(&a->archive,
+					    ARCHIVE_ERRNO_FILE_FORMAT,
+					    "RAR5 extra-field size exceeds remaining extra-field data");
+					return ARCHIVE_FATAL;
+				}
 				extra_data_size -= extra_field_size;
 				if (ARCHIVE_OK != consume(a, extra_field_size)) {
 					return ARCHIVE_EOF;
@@ -3598,8 +3604,7 @@ static int merge_block(struct archive_read* a, ssize_t block_size,
 	rar5->cstate.switch_multivolume = 1;
 
 	/* Reallocate the memory which will hold the whole block. */
-	if(rar5->vol.push_buf)
-		free((void*) rar5->vol.push_buf);
+	free(rar5->vol.push_buf);
 
 	/* Increasing the allocation block by 8 is due to bit reading functions,
 	 * which are using additional 2 or 4 bytes. Allocating the block size

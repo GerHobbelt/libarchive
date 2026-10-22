@@ -1202,6 +1202,192 @@ DEFINE_TEST(test_read_format_7zip_lzma1_arm)
 	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
 }
 
+static void
+test_armthumb_filter(const char *refname)
+{
+	struct archive *a;
+	struct archive_entry *ae;
+	char buff[98304];
+	uint32_t computed_crc = 0;
+	uint32_t expected_crc = 0xa4287015;
+
+	assert((a = archive_read_new()) != NULL);
+
+	extract_reference_file(refname);
+
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	assert((a = archive_read_new()) != NULL);
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
+
+	assertEqualIntA(a, ARCHIVE_OK,
+		archive_read_open_filename(a, refname, 10240));
+
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	assertEqualInt((AE_IFREG | 0644), archive_entry_mode(ae));
+	assertEqualString("thumb_payload.bin", archive_entry_pathname(ae));
+	assertEqualInt(sizeof(buff), archive_entry_size(ae));
+	assertEqualInt(sizeof(buff), archive_read_data(a, buff, sizeof(buff)));
+	computed_crc = bitcrc32(computed_crc, buff, sizeof(buff));
+	assertEqualInt(computed_crc, expected_crc);
+
+	assertEqualInt(1, archive_file_count(a));
+
+	assertEqualIntA(a, ARCHIVE_EOF, archive_read_next_header(a, &ae));
+
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+}
+
+DEFINE_TEST(test_read_format_7zip_deflate_armthumb)
+{
+	struct archive *a;
+
+	assert((a = archive_read_new()) != NULL);
+
+	if (ARCHIVE_OK != archive_read_support_filter_gzip(a)) {
+		skipping(
+		    "7zip:deflate decoding is not supported on this platform");
+	} else {
+		test_armthumb_filter(
+		    "test_read_format_7zip_deflate_armthumb.7z");
+	}
+
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+}
+
+DEFINE_TEST(test_read_format_7zip_lzma1_armthumb)
+{
+	struct archive *a;
+
+	assert((a = archive_read_new()) != NULL);
+
+	if (ARCHIVE_OK != archive_read_support_filter_lzma(a)) {
+		skipping(
+		    "7zip:lzma decoding is not supported on this platform");
+	} else {
+		test_armthumb_filter("test_read_format_7zip_lzma1_armthumb.7z");
+	}
+
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+}
+
+static void
+test_ia64_filter(const char *refname)
+{
+	struct archive *a;
+	struct archive_entry *ae;
+	char buff[98304];
+	uint32_t computed_crc = 0;
+	uint32_t expected_crc = 0xa0b3ced4;
+
+	assert((a = archive_read_new()) != NULL);
+
+	extract_reference_file(refname);
+
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	assert((a = archive_read_new()) != NULL);
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
+
+	assertEqualIntA(a, ARCHIVE_OK,
+		archive_read_open_filename(a, refname, 10240));
+
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	assertEqualInt((AE_IFREG | 0644), archive_entry_mode(ae));
+	assertEqualString("ia64_payload.bin", archive_entry_pathname(ae));
+	assertEqualInt(sizeof(buff), archive_entry_size(ae));
+	assertEqualInt(sizeof(buff), archive_read_data(a, buff, sizeof(buff)));
+	computed_crc = bitcrc32(computed_crc, buff, sizeof(buff));
+	assertEqualInt(computed_crc, expected_crc);
+
+	assertEqualInt(1, archive_file_count(a));
+
+	assertEqualIntA(a, ARCHIVE_EOF, archive_read_next_header(a, &ae));
+
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+}
+
+DEFINE_TEST(test_read_format_7zip_deflate_ia64)
+{
+	struct archive *a;
+
+	assert((a = archive_read_new()) != NULL);
+
+	if (ARCHIVE_OK != archive_read_support_filter_gzip(a)) {
+		skipping(
+		    "7zip:deflate decoding is not supported on this platform");
+	} else {
+		test_ia64_filter("test_read_format_7zip_deflate_ia64.7z");
+	}
+
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+}
+
+DEFINE_TEST(test_read_format_7zip_lzma1_ia64)
+{
+	struct archive *a;
+
+	assert((a = archive_read_new()) != NULL);
+
+	if (ARCHIVE_OK != archive_read_support_filter_lzma(a)) {
+		skipping(
+		    "7zip:lzma decoding is not supported on this platform");
+	} else {
+		test_ia64_filter("test_read_format_7zip_lzma1_ia64.7z");
+	}
+
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+}
+
+DEFINE_TEST(test_read_format_7zip_deflate_delta)
+{
+	const char *refname = "test_read_format_7zip_deflate_delta.7z";
+	struct archive *a;
+	struct archive_entry *ae;
+	char buff[1024];
+	ssize_t bytes;
+	int64_t total = 0;
+	uint32_t computed_crc = 0;
+	uint32_t expected_crc = 0x0a49c61b;
+
+	assert((a = archive_read_new()) != NULL);
+
+	if (ARCHIVE_OK != archive_read_support_filter_gzip(a)) {
+		skipping(
+		    "7zip:deflate decoding is not supported on this platform");
+		assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+		return;
+	}
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+
+	extract_reference_file(refname);
+	assert((a = archive_read_new()) != NULL);
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_open_filename(a, refname, 10240));
+
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	assertEqualString("delta_payload.bin", archive_entry_pathname(ae));
+	assertEqualInt(262144, archive_entry_size(ae));
+	while ((bytes = archive_read_data(a, buff, sizeof(buff))) > 0) {
+		computed_crc = bitcrc32(computed_crc, buff, bytes);
+		total += bytes;
+	}
+	assertEqualInt(0, bytes);
+	assertEqualInt(262144, total);
+	assertEqualInt(computed_crc, expected_crc);
+
+	assertEqualInt(1, archive_file_count(a));
+
+	assertEqualIntA(a, ARCHIVE_EOF, archive_read_next_header(a, &ae));
+
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+}
+
 DEFINE_TEST(test_read_format_7zip_ppmd)
 {
 	test_ppmd();
@@ -2012,6 +2198,31 @@ DEFINE_TEST(test_read_format_7zip_lzma2_powerpc)
 		test_powerpc_filter("test_read_format_7zip_lzma2_powerpc.7z");
 	}
 
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+}
+
+/*
+ * A degenerate 7-Zip header can leave __archive_read_filter_ahead() with an
+ * empty client buffer and an empty copy buffer, that is with
+ * f->client_next == NULL and f->avail == 0.  The unconditional
+ * "f->client_next -= f->avail" was then a zero offset applied to a null
+ * pointer; a UBSan build aborts on it.  The observable behaviour is
+ * unchanged, so only a sanitizer build catches a regression here.
+ */
+DEFINE_TEST(test_read_format_7zip_null_client_next)
+{
+	const char *refname = "test_read_format_7zip_null_client_next.7z";
+	struct archive *a;
+	struct archive_entry *ae;
+
+	extract_reference_file(refname);
+
+	assert((a = archive_read_new()) != NULL);
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_open_filename(a, refname, 10240));
+	assertEqualIntA(a, ARCHIVE_FATAL, archive_read_next_header(a, &ae));
 	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
 }
 

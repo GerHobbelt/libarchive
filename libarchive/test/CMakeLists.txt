@@ -29,6 +29,7 @@ IF(ENABLE_TEST)
     test_archive_match_owner.c
     test_archive_match_path.c
     test_archive_match_time.c
+    test_archive_ntfs_time.c
     test_archive_parse_date.c
     test_archive_pathmatch.c
     test_archive_pathmatch_oob.c
@@ -77,6 +78,7 @@ IF(ENABLE_TEST)
     test_compat_xz.c
     test_compat_zip.c
     test_compat_zstd.c
+    test_create_child_environment.c
     test_empty_write.c
     test_entry.c
     test_entry_strmode.c
@@ -176,6 +178,7 @@ IF(ENABLE_TEST)
     test_read_format_isorr_rr_moved.c
     test_read_format_isozisofs_compress.c
     test_read_format_iso_rockridge_ce_overflow.c
+    test_read_format_iso_rockridge_cl_re_cycle.c
     test_read_format_iso_rockridge_zf_overflow.c
     test_read_format_iso_zisofs_overflow.c
     test_read_format_lha.c
@@ -194,11 +197,13 @@ IF(ENABLE_TEST)
     test_read_format_rar_encryption_partially.c
     test_read_format_rar_invalid1.c
     test_read_format_rar_filter.c
+    test_read_format_rar_filter_incomplete_block.c
     test_read_format_rar_overflow.c
     test_read_format_rar5.c
     test_read_format_rar5_bad_filter.c
     test_read_format_rar5_bad_tables.c
     test_read_format_rar5_block_hdr_fail_loop.c
+    test_read_format_rar5_extra_field_underflow.c
     test_read_format_rar5_header_size_wraparound.c
     test_read_format_rar5_loop_bug.c
     test_read_format_rar5_truncated_htime.c
@@ -232,6 +237,7 @@ IF(ENABLE_TEST)
     test_read_format_zip.c
     test_read_format_zip_7075_utf8_paths.c
     test_read_format_zip_comment_stored.c
+    test_read_format_zip_empty.c
     test_read_format_zip_encryption_data.c
     test_read_format_zip_encryption_header.c
     test_read_format_zip_encryption_partially.c
@@ -242,6 +248,7 @@ IF(ENABLE_TEST)
     test_read_format_zip_mac_metadata.c
     test_read_format_zip_malformed.c
     test_read_format_zip_msdos.c
+    test_read_format_zip_negative_timestamps.c
     test_read_format_zip_nested.c
     test_read_format_zip_nofiletype.c
     test_read_format_zip_padded.c
@@ -324,6 +331,7 @@ IF(ENABLE_TEST)
     test_write_format_iso9660_joliet_id.c
     test_write_format_iso9660_rockridge.c
     test_write_format_iso9660_rockridge_overflow.c
+    test_write_format_iso9660_rr_moved_notdir.c
     test_write_format_iso9660_zisofs.c
     test_write_format_iso9660_zisofs_overflow.c
     test_write_format_iso9660_bugs.c

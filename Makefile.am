@@ -140,6 +140,7 @@ noinst_HEADERS= \
 	libarchive/archive_write_disk_private.h \
 	libarchive/archive_write_private.h \
 	libarchive/archive_write_set_format_private.h \
+	libarchive/archive_xml_private.h \
 	libarchive/archive_xxhash.h \
 	libarchive/config_freebsd.h \
 	libarchive/filter_fork.h
@@ -402,6 +403,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_archive_match_owner.c \
 	libarchive/test/test_archive_match_path.c \
 	libarchive/test/test_archive_match_time.c \
+	libarchive/test/test_archive_ntfs_time.c \
 	libarchive/test/test_archive_parse_date.c \
 	libarchive/test/test_archive_pathmatch.c \
 	libarchive/test/test_archive_pathmatch_oob.c \
@@ -450,6 +452,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_compat_xz.c \
 	libarchive/test/test_compat_zip.c \
 	libarchive/test/test_compat_zstd.c \
+	libarchive/test/test_create_child_environment.c \
 	libarchive/test/test_empty_write.c \
 	libarchive/test/test_entry.c \
 	libarchive/test/test_entry_strmode.c \
@@ -549,6 +552,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_isorr_rr_moved.c \
 	libarchive/test/test_read_format_isozisofs_compress.c \
 	libarchive/test/test_read_format_iso_rockridge_ce_overflow.c \
+	libarchive/test/test_read_format_iso_rockridge_cl_re_cycle.c \
 	libarchive/test/test_read_format_iso_rockridge_zf_overflow.c \
 	libarchive/test/test_read_format_iso_zisofs_overflow.c \
 	libarchive/test/test_read_format_lha.c \
@@ -566,12 +570,14 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_rar_encryption_partially.c \
 	libarchive/test/test_read_format_rar_encryption_header.c \
 	libarchive/test/test_read_format_rar_filter.c \
+	libarchive/test/test_read_format_rar_filter_incomplete_block.c \
 	libarchive/test/test_read_format_rar_invalid1.c \
 	libarchive/test/test_read_format_rar_overflow.c \
 	libarchive/test/test_read_format_rar5.c \
 	libarchive/test/test_read_format_rar5_bad_filter.c \
 	libarchive/test/test_read_format_rar5_bad_tables.c \
 	libarchive/test/test_read_format_rar5_block_hdr_fail_loop.c \
+	libarchive/test/test_read_format_rar5_extra_field_underflow.c \
 	libarchive/test/test_read_format_rar5_header_size_wraparound.c \
 	libarchive/test/test_read_format_rar5_loop_bug.c \
 	libarchive/test/test_read_format_rar5_truncated_htime.c \
@@ -605,6 +611,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_zip.c \
 	libarchive/test/test_read_format_zip_7075_utf8_paths.c \
 	libarchive/test/test_read_format_zip_comment_stored.c \
+	libarchive/test/test_read_format_zip_empty.c \
 	libarchive/test/test_read_format_zip_encryption_data.c \
 	libarchive/test/test_read_format_zip_encryption_partially.c \
 	libarchive/test/test_read_format_zip_encryption_header.c \
@@ -615,6 +622,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_zip_mac_metadata.c \
 	libarchive/test/test_read_format_zip_malformed.c \
 	libarchive/test/test_read_format_zip_msdos.c \
+	libarchive/test/test_read_format_zip_negative_timestamps.c \
 	libarchive/test/test_read_format_zip_nested.c \
 	libarchive/test/test_read_format_zip_nofiletype.c \
 	libarchive/test/test_read_format_zip_padded.c \
@@ -698,6 +706,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_write_format_iso9660_joliet_id.c \
 	libarchive/test/test_write_format_iso9660_rockridge.c \
 	libarchive/test/test_write_format_iso9660_rockridge_overflow.c \
+	libarchive/test/test_write_format_iso9660_rr_moved_notdir.c \
 	libarchive/test/test_write_format_iso9660_zisofs.c \
 	libarchive/test/test_write_format_iso9660_zisofs_overflow.c \
 	libarchive/test/test_write_format_mtree.c \
@@ -894,6 +903,9 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_7zip_deflate_arm64.7z.uu \
 	libarchive/test/test_read_format_7zip_deflate_arm64_large.7z.uu \
 	libarchive/test/test_read_format_7zip_deflate_arm_arm64.7z.uu \
+	libarchive/test/test_read_format_7zip_deflate_armthumb.7z.uu \
+	libarchive/test/test_read_format_7zip_deflate_delta.7z.uu \
+	libarchive/test/test_read_format_7zip_deflate_ia64.7z.uu \
 	libarchive/test/test_read_format_7zip_deflate_powerpc.7z.uu \
 	libarchive/test/test_read_format_7zip_deflate_riscv.7z.uu \
 	libarchive/test/test_read_format_7zip_delta_lzma1.7z.uu \
@@ -915,6 +927,8 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_7zip_lzma1_lzma2.7z.uu \
 	libarchive/test/test_read_format_7zip_lzma1_arm.7z.uu \
 	libarchive/test/test_read_format_7zip_lzma1_arm64.7z.uu \
+	libarchive/test/test_read_format_7zip_lzma1_armthumb.7z.uu \
+	libarchive/test/test_read_format_7zip_lzma1_ia64.7z.uu \
 	libarchive/test/test_read_format_7zip_lzma1_powerpc.7z.uu \
 	libarchive/test/test_read_format_7zip_lzma1_riscv.7z.uu \
 	libarchive/test/test_read_format_7zip_lzma1_sparc.7z.uu \
@@ -929,6 +943,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_7zip_malformed3.7z.uu \
 	libarchive/test/test_read_format_7zip_malformed4.7z.uu \
 	libarchive/test/test_read_format_7zip_malformed_numfiles_oom.7z.uu \
+	libarchive/test/test_read_format_7zip_null_client_next.7z.uu \
 	libarchive/test/test_read_format_7zip_packinfo_digests.7z.uu \
 	libarchive/test/test_read_format_7zip_ppmd.7z.uu \
 	libarchive/test/test_read_format_7zip_ppmd_arm64.7z.uu \
@@ -1002,6 +1017,8 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_iso_rockridge_ce.iso.Z.uu \
 	libarchive/test/test_read_format_iso_rockridge_ce_loop.iso.Z.uu \
 	libarchive/test/test_read_format_iso_rockridge_ce_overflow.iso.Z.uu \
+	libarchive/test/test_read_format_iso_rockridge_cl_re_control.iso.Z.uu \
+	libarchive/test/test_read_format_iso_rockridge_cl_re_cycle.iso.Z.uu \
 	libarchive/test/test_read_format_iso_rockridge_new.iso.Z.uu \
 	libarchive/test/test_read_format_iso_rockridge_rr_moved.iso.Z.uu \
 	libarchive/test/test_read_format_iso_rockridge_zf_overflow.iso.uu \
@@ -1034,6 +1051,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_rar_encryption_partially.rar.uu \
 	libarchive/test/test_read_format_rar_endarc_huge.rar.uu \
 	libarchive/test/test_read_format_rar_filter.rar.uu \
+	libarchive/test/test_read_format_rar_filter_incomplete_block.rar.uu \
 	libarchive/test/test_read_format_rar_invalid1.rar.uu \
 	libarchive/test/test_read_format_rar_multi_lzss_blocks.rar.uu \
 	libarchive/test/test_read_format_rar3_lowdist_reset.rar.uu \
@@ -1075,6 +1093,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_rar5_different_window_size.rar.uu \
 	libarchive/test/test_read_format_rar5_different_solid_window_size.rar.uu \
 	libarchive/test/test_read_format_rar5_distance_overflow.rar.uu \
+	libarchive/test/test_read_format_rar5_extra_field_underflow.rar.uu \
 	libarchive/test/test_read_format_rar5_extra_field_version.rar.uu \
 	libarchive/test/test_read_format_rar5_fileattr.rar.uu \
 	libarchive/test/test_read_format_rar5_hardlink.rar.uu \
@@ -1828,6 +1847,7 @@ bsdunzip_test_SOURCES= \
 	unzip/test/test_t_bad.c \
 	unzip/test/test_u.c \
 	unzip/test/test_version.c \
+	unzip/test/test_windows_paths.c \
 	unzip/test/test_x.c \
 	unzip/test/test_Z1.c \
 	unzip/test/test_P_encryption.c \
@@ -1863,6 +1883,7 @@ bsdunzip_test_EXTRA_DIST= \
 	unzip/test/test_symlink_1.zip.uu \
 	unzip/test/test_symlink_2.zip.uu \
 	unzip/test/test_symlink_dotdot.zip.uu \
+	unzip/test/test_windows_paths.zip.uu \
 	unzip/test/test_t_bad.zip.uu \
 	unzip/test/test_u_new.zip.uu \
 	unzip/test/test_u_old.zip.uu \

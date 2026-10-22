@@ -355,13 +355,18 @@ struct _7zip {
 	uint32_t		 bcj_state;
 	size_t			 odd_bcj_size; /* Number of bytes currently stashed in odd_bcj. */
 	/* Bytes that a filter didn't have enough lookahead to transform yet.
-	 * Big enough to hold the largest lookahead (RISCV). */
-	unsigned char		 odd_bcj[8];
+	 * Big enough to hold the largest lookahead (IA64). */
+	unsigned char		 odd_bcj[16];
 
 	/* Decoding BCJ data. */
 	size_t			 bcj_prevPosT;
 	uint32_t		 bcj_prevMask;
 	uint32_t		 bcj_ip;
+
+	/* Decoding Delta data. */
+	unsigned		 delta_dist;
+	uint8_t			 delta_pos;
+	uint8_t			 delta_history[256];
 
 	/* Decoding BCJ2 data. */
 	int64_t			 main_stream_bytes_remaining;
@@ -462,11 +467,16 @@ static void	x86_Init(struct _7zip *);
 static size_t	x86_Convert(struct _7zip *, uint8_t *, size_t);
 static void	arm_Init(struct _7zip *);
 static size_t	arm_Convert(struct _7zip *, uint8_t *, size_t);
+static void	armthumb_Init(struct _7zip *);
+static size_t	armthumb_Convert(struct _7zip *, uint8_t *, size_t);
 static size_t	arm64_Convert(struct _7zip *, uint8_t *, size_t);
 static ssize_t	Bcj2_Decode(struct _7zip *, uint8_t *, size_t);
 static size_t	sparc_Convert(struct _7zip *, uint8_t *, size_t);
 static size_t	powerpc_Convert(struct _7zip *, uint8_t *, size_t);
 static size_t	riscv_Convert(struct _7zip *, uint8_t *, size_t);
+static size_t	ia64_Convert(struct _7zip *, uint8_t *, size_t);
+static void	delta_Init(struct _7zip *, unsigned);
+static void	delta_Decode(struct _7zip *, uint8_t *, size_t);
 static size_t	bcj_lookahead(int64_t);
 static int64_t	seek_compat(struct archive_read *, int64_t, int, int);
 
@@ -1353,15 +1363,25 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 			if (coder2->codec != _7Z_X86 &&
 			    coder2->codec != _7Z_X86_BCJ2 &&
 			    coder2->codec != _7Z_ARM &&
+			    coder2->codec != _7Z_ARMTHUMB &&
 			    coder2->codec != _7Z_ARM64 &&
+			    coder2->codec != _7Z_IA64 &&
 			    coder2->codec != _7Z_POWERPC &&
 			    coder2->codec != _7Z_RISCV &&
-			    coder2->codec != _7Z_SPARC) {
+			    coder2->codec != _7Z_SPARC &&
+			    coder2->codec != _7Z_DELTA) {
 				archive_set_error(&a->archive,
 				    ARCHIVE_ERRNO_MISC,
 				    "Unsupported filter %jx for %jx",
 				    (uintmax_t)coder2->codec,
 				    (uintmax_t)coder1->codec);
+				return (ARCHIVE_FAILED);
+			}
+			if (coder2->codec == _7Z_DELTA &&
+			    coder2->propertiesSize != 1) {
+				archive_set_error(&a->archive,
+				    ARCHIVE_ERRNO_MISC,
+				    "Invalid Delta parameter");
 				return (ARCHIVE_FAILED);
 			}
 			zip->codec2 = coder2->codec;
@@ -1370,11 +1390,16 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 				x86_Init(zip);
 			else if (coder2->codec == _7Z_ARM)
 				arm_Init(zip);
+			else if (coder2->codec == _7Z_ARMTHUMB)
+				armthumb_Init(zip);
 			else if (coder2->codec == _7Z_ARM64 ||
+			    coder2->codec == _7Z_IA64 ||
 			    coder2->codec == _7Z_POWERPC ||
 			    coder2->codec == _7Z_RISCV ||
 			    coder2->codec == _7Z_SPARC)
 				zip->bcj_ip = 0;
+			else if (coder2->codec == _7Z_DELTA)
+				delta_Init(zip, coder2->properties[0] + 1);
 		}
 		break;
 	default:
@@ -1438,7 +1463,9 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 					x86_Init(zip);
 				else if (zip->codec2 == _7Z_ARM)
 					arm_Init(zip);
-				else /* ARM64, POWERPC, RISCV, SPARC. */
+				else if (zip->codec2 == _7Z_ARMTHUMB)
+					armthumb_Init(zip);
+				else /* ARM64, IA64, POWERPC, RISCV, SPARC. */
 					zip->bcj_ip = 0;
 			} else {
 				switch (zip->codec2) {
@@ -2011,6 +2038,9 @@ decompress(struct archive_read *a, struct _7zip *zip,
 		case _7Z_ARM:
 			l = arm_Convert(zip, buff, *outbytes);
 			break;
+		case _7Z_ARMTHUMB:
+			l = armthumb_Convert(zip, buff, *outbytes);
+			break;
 		case _7Z_ARM64:
 			l = arm64_Convert(zip, buff, *outbytes);
 			break;
@@ -2022,6 +2052,9 @@ decompress(struct archive_read *a, struct _7zip *zip,
 			break;
 		case _7Z_RISCV:
 			l = riscv_Convert(zip, buff, *outbytes);
+			break;
+		case _7Z_IA64:
+			l = ia64_Convert(zip, buff, *outbytes);
 			break;
 		default:
 			/* Unreachable: bcj_lookahead() returns non-zero only
@@ -2071,6 +2104,13 @@ decompress(struct archive_read *a, struct _7zip *zip,
 		bcj2_avail_out -= bytes;
 		*outbytes = o_avail_out - bcj2_avail_out;
 	}
+
+	/*
+	 * Decode Delta. LZMA1 and LZMA2 use liblzma's Delta filter instead.
+	 */
+	if (zip->codec2 == _7Z_DELTA &&
+	    zip->codec != _7Z_LZMA && zip->codec != _7Z_LZMA2)
+		delta_Decode(zip, buff, *outbytes);
 
 	return (ret);
 }
@@ -4361,6 +4401,54 @@ arm_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
 	return i;
 }
 
+static void
+armthumb_Init(struct _7zip *zip)
+{
+	zip->bcj_ip = 4;
+}
+
+static size_t
+armthumb_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
+{
+	// This function was adapted from
+	// static size_t bcj_armthumb(struct xz_dec_bcj *s, uint8_t *buf, size_t size)
+	// in https://git.tukaani.org/xz-embedded.git
+
+	/*
+	 * Branch/Call/Jump (BCJ) filter decoders
+	 *
+	 * Authors: Lasse Collin <lasse.collin@tukaani.org>
+	 *          Igor Pavlov <https://7-zip.org/>
+	 *
+	 * SPDX-License-Identifier: 0BSD
+	 */
+
+	size_t i;
+	uint32_t addr;
+
+	for (i = 0; i + 4 <= size; i += 2) {
+		if ((buf[i + 1] & 0xF8) == 0xF0
+		    && (buf[i + 3] & 0xF8) == 0xF8) {
+			addr = (((uint32_t)buf[i + 1] & 0x07) << 19)
+			    | ((uint32_t)buf[i] << 11)
+			    | (((uint32_t)buf[i + 3] & 0x07) << 8)
+			    | (uint32_t)buf[i + 2];
+			addr <<= 1;
+			addr -= zip->bcj_ip + (uint32_t)i;
+			addr >>= 1;
+			buf[i + 1] = (uint8_t)(0xF0 | ((addr >> 19) & 0x07));
+			buf[i] = (uint8_t)(addr >> 11);
+			buf[i + 3] = (uint8_t)(0xF8 | ((addr >> 8) & 0x07));
+			buf[i + 2] = (uint8_t)addr;
+			i += 2;
+		}
+	}
+
+	zip->bcj_ip += (uint32_t)i;
+
+	return i;
+}
+
 static size_t
 arm64_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
 {
@@ -4624,6 +4712,132 @@ riscv_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
 	return i;
 }
 
+static size_t
+ia64_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
+{
+	// This function was adapted from
+	// static size_t bcj_ia64(struct xz_dec_bcj *s, uint8_t *buf, size_t size)
+	// in https://git.tukaani.org/xz-embedded.git
+
+	/*
+	 * Branch/Call/Jump (BCJ) filter decoders
+	 *
+	 * Authors: Lasse Collin <lasse.collin@tukaani.org>
+	 *          Igor Pavlov <https://7-zip.org/>
+	 *
+	 * SPDX-License-Identifier: 0BSD
+	 */
+
+	static const uint8_t branch_table[32] = {
+		0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0,
+		4, 4, 6, 6, 0, 0, 7, 7,
+		4, 4, 0, 0, 4, 4, 0, 0
+	};
+
+	/* Loop counters */
+	size_t i;
+	size_t j;
+
+	/* Instruction slot (0, 1, or 2) in the 128-bit instruction word */
+	uint32_t slot;
+
+	/* Bitwise offset of the instruction indicated by slot */
+	uint32_t bit_pos;
+
+	/* bit_pos split into byte and bit parts */
+	uint32_t byte_pos;
+	uint32_t bit_res;
+
+	/* Address part of an instruction */
+	uint32_t addr;
+
+	/* Mask used to detect which instructions to convert */
+	uint32_t mask;
+
+	/* 41-bit instruction stored somewhere in the lowest 48 bits */
+	uint64_t instr;
+
+	/* Instruction normalized with bit_res for easier manipulation */
+	uint64_t norm;
+
+	size &= ~(size_t)15;
+
+	for (i = 0; i < size; i += 16) {
+		mask = branch_table[buf[i] & 0x1F];
+		for (slot = 0, bit_pos = 5; slot < 3; ++slot, bit_pos += 41) {
+			if (((mask >> slot) & 1) == 0)
+				continue;
+
+			byte_pos = bit_pos >> 3;
+			bit_res = bit_pos & 7;
+			instr = 0;
+			for (j = 0; j < 6; ++j)
+				instr |= (uint64_t)(buf[i + j + byte_pos])
+				    << (8 * j);
+
+			norm = instr >> bit_res;
+
+			if (((norm >> 37) & 0x0F) == 0x05
+			    && ((norm >> 9) & 0x07) == 0) {
+				addr = (norm >> 13) & 0x0FFFFF;
+				addr |= ((uint32_t)(norm >> 36) & 1) << 20;
+				addr <<= 4;
+				addr -= zip->bcj_ip + (uint32_t)i;
+				addr >>= 4;
+
+				norm &= ~((uint64_t)0x8FFFFF << 13);
+				norm |= (uint64_t)(addr & 0x0FFFFF) << 13;
+				norm |= (uint64_t)(addr & 0x100000)
+				    << (36 - 20);
+
+				instr &= (1U << bit_res) - 1;
+				instr |= norm << bit_res;
+
+				for (j = 0; j < 6; j++)
+					buf[i + j + byte_pos]
+					    = (uint8_t)(instr >> (8 * j));
+			}
+		}
+	}
+
+	zip->bcj_ip += (uint32_t)i;
+
+	return i;
+}
+
+static void
+delta_Init(struct _7zip *zip, unsigned dist)
+{
+	zip->delta_dist = dist;
+	zip->delta_pos = 0;
+	memset(zip->delta_history, 0, sizeof(zip->delta_history));
+}
+
+static void
+delta_Decode(struct _7zip *zip, uint8_t *buf, size_t size)
+{
+	// This was adapted from src/liblzma/delta/delta_decoder.c's
+	// static void decode_buffer(lzma_delta_coder *coder, uint8_t *buffer, size_t size)
+	// function in https://github.com/tukaani-project/xz.git
+
+	/*
+	 * Delta filter decoder
+	 *
+	 * Author: Lasse Collin
+	 *
+	 * SPDX-License-Identifier: 0BSD
+	 */
+
+	size_t i;
+
+	for (i = 0; i < size; i++) {
+		buf[i] += zip->delta_history[
+			(zip->delta_dist + zip->delta_pos) & 0xFF];
+		zip->delta_history[zip->delta_pos--] = buf[i];
+	}
+}
+
 /*
  * The widest instruction the BCJ filters rewrite, and the smallest output
  * buffer that those filters can make progress with. Filters leave up to one
@@ -4639,7 +4853,10 @@ bcj_lookahead(int64_t codec2)
 		return (5);
 	case _7Z_RISCV:
 		return (8);
+	case _7Z_IA64:
+		return (16);
 	case _7Z_ARM:
+	case _7Z_ARMTHUMB:
 	case _7Z_ARM64:
 	case _7Z_POWERPC:
 	case _7Z_SPARC:
