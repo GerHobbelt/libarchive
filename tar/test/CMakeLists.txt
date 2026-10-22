@@ -17,6 +17,7 @@ IF(ENABLE_TAR AND ENABLE_TEST)
     test_copy_data_warning.c
     test_crlf_mtree.c
     test_empty_mtree.c
+    test_extract_pipe_windows.c
     test_extract_tar_Z.c
     test_extract_tar_bz2.c
     test_extract_tar_grz.c
