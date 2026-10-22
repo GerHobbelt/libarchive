@@ -27,31 +27,41 @@
 #include "bsdcat.h"
 #include "lafe_err.h"
 
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
 #define	BYTES_PER_BLOCK	(20*512)
 
-static struct archive *a;
-static struct archive_entry *ae;
-static const char *bsdcat_current_path;
+static struct archive *a = NULL;
+static struct archive_entry *ae = NULL;
+static const char *bsdcat_current_path = NULL;
 static int exit_status = 0;
 
 
-static __LA_NORETURN void
+static int usage(FILE *stream, int eval);
+static void bsdcat_next(void);
+static void bsdcat_print_error(void);
+static void bsdcat_read_to_stdout(const char* filename);
+
+
+static int
 usage(FILE *stream, int eval)
 {
 	const char *p;
 	p = lafe_getprogname();
 	fprintf(stream,
 	    "Usage: %s [-h] [--help] [--version] [--] [filenames...]\n", p);
-	exit(eval);
+	return eval;
 }
 
-static __LA_NORETURN void
+static int
 version(void)
 {
 	printf("bsdcat %s - %s \n",
 	    BSDCAT_VERSION_STRING,
 	    archive_version_details());
-	exit(0);
+	return 0;
 }
 
 static void
@@ -99,11 +109,17 @@ bsdcat_read_to_stdout(const char* filename)
 	a = NULL;
 }
 
-int
-main(int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_bsdcat_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	struct bsdcat *bsdcat, bsdcat_storage;
 	int c;
+
+	exit_status = 0;
 
 	bsdcat = &bsdcat_storage;
 	memset(bsdcat, 0, sizeof(*bsdcat));
@@ -123,20 +139,14 @@ main(int argc, char **argv)
 	bsdcat->argv = argv;
 	bsdcat->argc = argc;
 
-	while ((c = bsdcat_getopt(bsdcat)) != -1) {
+	if ((c = bsdcat_getopt(bsdcat)) != -1) {
 		switch (c) {
 		case 'h':
-			usage(stdout, 0);
-			/* NOTREACHED */
-			/* Fallthrough */
+			return usage(stdout, 0);
 		case OPTION_VERSION:
-			version();
-			/* NOTREACHED */
-			/* Fallthrough */
+			return version();
 		default:
-			usage(stderr, 1);
-			/* Fallthrough */
-			/* NOTREACHED */
+			return usage(stderr, 1);
 		}
 	}
 
@@ -153,5 +163,5 @@ main(int argc, char **argv)
 		archive_read_free(a); /* Help valgrind & friends */
 	}
 
-	exit(exit_status);
+	return exit_status;
 }

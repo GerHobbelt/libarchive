@@ -37,9 +37,26 @@
 #include <archive.h>
 #include <archive_entry.h>
 
+#if !defined(BUILD_MONOLITHIC)
 #if defined __MINGW32__
 #include <getopt.h>
 #endif
+#else
+#include "mupdf/fitz/getopt.h"
+
+#define getopt fz_getopt
+#define optarg fz_optarg
+#define optind fz_optind
+#endif
+
+#ifndef STDIN_FILENO
+#  define STDIN_FILENO  fileno(stdin)
+#endif
+
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
 
 static const char *errnostr(int e)
 {
@@ -75,7 +92,7 @@ static void usage(const char *prog)
 	fprintf(stderr, "Usage: %s [-f filename] [-h] [-q] [-s]\n", prog);
 }
 
-static void printhelp()
+static void printhelp(void)
 {
 	fprintf(stdout, "archivetest: verify reading archives with "
 	    "libarchive\n\n"
@@ -103,18 +120,23 @@ static int v_print(int verbose, const char *format, ...)
 	return (r);
 }
 
-int main(int argc, char *argv[])
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_test_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	struct archive *a;
 	struct archive_entry *entry;
-	char *filename;
+	const char *filename;
 	const char *p;
 	char buffer[4096];
 	int c;
 	int v, skip_data, raw;
 	int r = ARCHIVE_OK;
 	int format_printed;
-	mode_t mode;
+	unsigned short int mode;
 
 	filename = NULL;
 	skip_data = 0;
@@ -126,19 +148,25 @@ int main(int argc, char *argv[])
 			case 'f':
 				filename = optarg;
 				break;
+
 			case 'h':
 				printhelp();
-				exit(0);
+				return 0;
+
 			case 'q':
 				v = 0;
 				break;
+
 			case 'r':
 				raw = 1;
 				break;
+
 			case 's':
 				skip_data = 1;
 				break;
+
 			case '?':
+#if !defined(MUPDF_FITZ_GETOPT_H)  // fz_getopt() will already have reported the error; besides, it doesn't support the `optopt` feature.
 				if (optopt == 'f')
 					fprintf(stderr, "Option -%c requires "
 					    "an argument.\n", optopt);
@@ -148,11 +176,12 @@ int main(int argc, char *argv[])
 				else
 					fprintf(stderr, "Unknown option "
 					    "character '\\x%x'.\n", optopt);
+#endif
 				usage(argv[0]);
-				exit(1);
-				break;
+				return 1;
+
 			default:
-				exit(1);
+				return 1;
 		}
 	}
 
@@ -177,7 +206,7 @@ int main(int argc, char *argv[])
 	if (r != ARCHIVE_OK) {
 		archive_read_free(a);
 		fprintf(stderr, "Invalid or unsupported data source\n");
-		exit(1);
+		return 1;
 	}
 
 	format_printed = 0;
@@ -227,9 +256,9 @@ int main(int argc, char *argv[])
 	v_print(v, "Last return code: %s (%d)\n", errnostr(r), r);
 	if (r == ARCHIVE_EOF || r == ARCHIVE_OK) {
 		archive_read_free(a);
-		exit(0);
+		return 0;
 	}
 	v_print(v, "Error string: %s\n", archive_error_string(a));
 	archive_read_free(a);
-	exit(2);
+	return 2;
 }

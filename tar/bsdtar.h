@@ -82,15 +82,9 @@ struct bsdtar {
 	 */
 	struct archive		*diskreader;	/* for write.c */
 	struct archive_entry_linkresolver *resolver; /* for write.c */
-	struct archive_dir	*archive_dir;	/* for write.c */
-	struct name_cache	*gname_cache;	/* for write.c */
 	char			*buff;		/* for write.c */
 	size_t			 buff_size;	/* for write.c */
-	int			 first_fs;	/* for write.c */
 	struct archive		*matching;	/* for matching.c */
-	struct security		*security;	/* for read.c */
-	struct name_cache	*uname_cache;	/* for write.c */
-	struct siginfo_data	*siginfo;	/* for siginfo.c */
 	struct substitution	*substitution;	/* for subst.c */
 	char			*ppbuff;	/* for util.c */
 };
@@ -196,7 +190,7 @@ int	edit_pathname(struct bsdtar *, struct archive_entry *);
 void	edit_mtime(struct bsdtar *, struct archive_entry *);
 int	need_report(void);
 int	pathcmp(const char *a, const char *b);
-void	safe_fprintf(FILE * ARCHIVE_RESTRICT, const char * ARCHIVE_RESTRICT fmt, ...) __LA_PRINTF(2, 3);
+void	safe_fputs(const char * ARCHIVE_RESTRICT s, FILE * ARCHIVE_RESTRICT);
 void	set_chdir(struct bsdtar *, const char *newdir);
 void	tar_mode_c(struct bsdtar *bsdtar);
 void	tar_mode_r(struct bsdtar *bsdtar);
@@ -227,6 +221,6 @@ int		cset_write_add_filters(struct creation_set *,
 const char * passphrase_callback(struct archive *, void *);
 void	     passphrase_free(char *);
 void	list_item_verbose(struct bsdtar *, FILE *,
-		    struct archive_entry *);
+		    struct archive_entry *, int exact_time);
 
 #endif

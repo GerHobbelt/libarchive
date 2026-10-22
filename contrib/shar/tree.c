@@ -49,6 +49,9 @@
 #endif
 #ifdef HAVE_DIRENT_H
 #include <dirent.h>
+#else
+// quick hack
+typedef struct DIR DIR;
 #endif
 #ifdef HAVE_ERRNO_H
 #include <errno.h>
@@ -64,6 +67,15 @@
 #endif
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
+#ifdef HAVE_IO_H
+#include <io.h>
+#endif
+#ifdef HAVE_DIRECT_H
+#include <direct.h>
+#endif
+#ifdef HAVE_STDINT_H
+#include <stdint.h>
 #endif
 
 #include "tree.h"

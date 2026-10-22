@@ -21,6 +21,21 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(_MSC_VER)
+#include <stdint.h>
+#define mode_t unsigned short
+#define ssize_t int64_t
+
+ /* Define S_ISREG if not defined by system headers, e.g. MSVC */
+#if !defined(S_ISREG) && defined(S_IFMT) && defined(S_IFREG)
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#endif
+#endif
+
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
 
 static void
 die(char *fmt, ...)
@@ -34,8 +49,12 @@ die(char *fmt, ...)
 	exit(1);
 }
 
-int
-main(int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_tarfilter_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	char buff[8192];
 	ssize_t len;

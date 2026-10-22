@@ -49,6 +49,7 @@
 #endif
 
 #include "archive.h"
+#include "archive_endian.h"
 #include "archive_private.h"
 #include "archive_string.h"
 #include "archive_write_private.h"
@@ -70,9 +71,9 @@ struct zstd {
 	size_t		 max_frame_in;
 	size_t		 min_frame_out;
 	size_t		 max_frame_out;
-	size_t		 cur_frame;
 	size_t		 cur_frame_in;
 	size_t		 cur_frame_out;
+	size_t		 total_out;
 	ZSTD_CStream	*cstream;
 	ZSTD_outBuffer	 out;
 #else
@@ -185,8 +186,9 @@ string_to_number(const char *string, intmax_t *numberp)
 
 	if (string == NULL || *string == '\0')
 		return (ARCHIVE_WARN);
+	errno = 0;
 	*numberp = strtoimax(string, &end, 10);
-	if (end == string || *end != '\0' || errno == EOVERFLOW) {
+	if (end == string || *end != '\0' || errno == ERANGE) {
 		*numberp = 0;
 		return (ARCHIVE_WARN);
 	}
@@ -203,6 +205,7 @@ string_to_size(const char *string, size_t *numberp)
 
 	if (string == NULL || *string == '\0' || *string == '-')
 		return (ARCHIVE_WARN);
+	errno = 0;
 	number = strtoumax(string, &end, 10);
 	if (end > string) {
 		if (*end == 'K' || *end == 'k') {
@@ -219,7 +222,7 @@ string_to_size(const char *string, size_t *numberp)
 			end++;
 		}
 	}
-	if (end == string || *end != '\0' || errno == EOVERFLOW) {
+	if (end == string || *end != '\0' || errno == ERANGE) {
 		return (ARCHIVE_WARN);
 	}
 	if (number > (uintmax_t)SIZE_MAX >> shift) {
@@ -344,13 +347,13 @@ archive_compressor_zstd_options(struct archive_write_filter *f, const char *key,
 		ZSTD_bounds bounds = ZSTD_cParam_getBounds(ZSTD_c_windowLog);
 		if (ZSTD_isError(bounds.error)) {
 			int max_distance = ((int)(sizeof(size_t) == 4 ? 30 : 31));
-			if (((int)long_distance) < 10 || (int)long_distance > max_distance) {
+			if (long_distance < 10 || long_distance > max_distance) {
 				archive_set_error(f->archive, ARCHIVE_ERRNO_MISC,
 			    "long out of range");
 				return (ARCHIVE_FAILED);
 			}
 		} else {
-			if ((int)long_distance < bounds.lowerBound || (int)long_distance > bounds.upperBound) {
+			if (long_distance < bounds.lowerBound || long_distance > bounds.upperBound) {
 				archive_set_error(f->archive, ARCHIVE_ERRNO_MISC,
 			    "long out of range");
 				return (ARCHIVE_FAILED);
@@ -358,7 +361,7 @@ archive_compressor_zstd_options(struct archive_write_filter *f, const char *key,
 		}
 #else
 		int max_distance = ((int)(sizeof(size_t) == 4 ? 30 : 31));
-		if (((int)long_distance) < 10 || (int)long_distance > max_distance)
+		if (long_distance < 10 || long_distance > max_distance)
 		    return (ARCHIVE_FAILED);
 #endif
 		zstd->long_distance = (int)long_distance;
@@ -379,28 +382,24 @@ static int
 archive_compressor_zstd_open(struct archive_write_filter *f)
 {
 	struct zstd *zstd = f->data;
+	size_t bs;
+	void *buf;
 
-	if (zstd->out.dst == NULL) {
-		size_t bs = ZSTD_CStreamOutSize(), bpb;
-		if (f->archive->magic == ARCHIVE_WRITE_MAGIC) {
-			/* Buffer size should be a multiple number of
-			 * the of bytes per block for performance. */
-			bpb = archive_write_get_bytes_per_block(f->archive);
-			if (bpb > bs)
-				bs = bpb;
-			else if (bpb != 0)
-				bs -= bs % bpb;
-		}
-		zstd->out.size = bs;
-		zstd->out.pos = 0;
-		zstd->out.dst = malloc(zstd->out.size);
-		if (zstd->out.dst == NULL) {
-			archive_set_error(f->archive, ENOMEM,
-			    "Can't allocate data for compression buffer");
-			return (ARCHIVE_FATAL);
-		}
+	f->bytes_per_block = archive_write_get_bytes_per_block(f->archive);
+	bs = ZSTD_CStreamOutSize();
+	/* round up to multiple of archive block size */
+	if (f->bytes_per_block > 1) {
+		bs = ((bs + f->bytes_per_block - 1) / f->bytes_per_block) *
+		    f->bytes_per_block;
 	}
-
+	if ((buf = realloc(zstd->out.dst, bs)) == NULL) {
+		archive_set_error(f->archive, ENOMEM,
+		    "Can't allocate data for compression buffer");
+		return (ARCHIVE_FATAL);
+	}
+	zstd->out.dst = buf;
+	zstd->out.size = bs;
+	zstd->out.pos = 0;
 	if (ZSTD_isError(ZSTD_initCStream(zstd->cstream,
 	    zstd->compression_level))) {
 		archive_set_error(f->archive, ARCHIVE_ERRNO_MISC,
@@ -454,11 +453,50 @@ archive_compressor_zstd_flush(struct archive_write_filter *f)
 static int
 archive_compressor_zstd_close(struct archive_write_filter *f)
 {
+	struct archive_write *a = (struct archive_write *)f->archive;
 	struct zstd *zstd = f->data;
+	size_t padsize, size;
+	int ret;
 
 	if (zstd->state == running)
 		zstd->state = finishing;
-	return (drive_compressor(f, zstd, 1, NULL, 0));
+	if ((ret = drive_compressor(f, zstd, 1, NULL, 0)) != ARCHIVE_OK)
+		return (ret);
+#ifdef ZSTD_MAGIC_SKIPPABLE_START
+#define ZSTD_SKIPHDRLEN 8
+	/*
+	 * Pad out with a skippable frame filled with zeroes, otherwise
+	 * libarchive will pad with just zeroes, which will result in a
+	 * decompression failure.
+	 */
+	while (f->bytes_per_block > 1 && zstd->total_out % f->bytes_per_block != 0) {
+		padsize = f->bytes_per_block -
+		    zstd->total_out % f->bytes_per_block;
+		if (padsize < ZSTD_SKIPHDRLEN)
+			padsize += f->bytes_per_block;
+		{
+			uint8_t *dst = (uint8_t *)zstd->out.dst;
+			archive_le32enc(dst + 0, ZSTD_MAGIC_SKIPPABLE_START);
+			archive_le32enc(dst + 4, padsize - ZSTD_SKIPHDRLEN);
+		}
+		ret = __archive_write_filter(f->next_filter, zstd->out.dst, ZSTD_SKIPHDRLEN);
+		if (ret != ARCHIVE_OK)
+			break;
+		zstd->total_out += ZSTD_SKIPHDRLEN;
+		padsize -= ZSTD_SKIPHDRLEN;
+		while (padsize > 0) {
+			size = padsize > a->null_length ? a->null_length : padsize;
+			ret = __archive_write_filter(f->next_filter, a->nulls, size);
+			if (ret != ARCHIVE_OK)
+				break;
+			zstd->total_out += size;
+			padsize -= size;
+		}
+		if (ret != ARCHIVE_OK)
+			break;
+	}
+#endif
+	return (ret);
 }
 
 /*
@@ -494,13 +532,13 @@ drive_compressor(struct archive_write_filter *f,
 			break;
 		case resetting:
 			ZSTD_CCtx_reset(zstd->cstream, ZSTD_reset_session_only);
-			zstd->cur_frame++;
 			zstd->cur_frame_in = 0;
 			zstd->cur_frame_out = 0;
 			zstd->state = running;
 			break;
 		}
 		zstd->cur_frame_in += in.pos - ipos;
+		zstd->total_out += zstd->out.pos - opos;
 		zstd->cur_frame_out += zstd->out.pos - opos;
 		if (zstd->state == running) {
 			if (zstd->cur_frame_in >= zstd->max_frame_in ||

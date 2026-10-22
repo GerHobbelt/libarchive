@@ -237,26 +237,39 @@ archive_compressor_xz_init_stream(struct archive_write_filter *f,
 		ret = lzma_alone_encoder(&(xz->stream), &xz->lzma_opt);
 	} else {	/* ARCHIVE_FILTER_LZIP */
 		int dict_size = xz->lzma_opt.dict_size;
-		int ds, log2dic, wedges;
+		uint32_t wedges;
+		unsigned char ds;
 
 		/* Calculate a coded dictionary size */
-		if (dict_size < (1 << 12) || dict_size > (1 << 29)) {
+		if (dict_size < (1U << 12) || dict_size > (1U << 29)) {
 			archive_set_error(f->archive, ARCHIVE_ERRNO_MISC,
 			    "Unacceptable dictionary size for lzip: %d",
 			    dict_size);
 			return (ARCHIVE_FATAL);
 		}
-		for (log2dic = 29; log2dic >= 12; log2dic--) {
-			if (dict_size & (1 << log2dic))
-				break;
+
+		{
+#if defined(__has_builtin) && __has_builtin(__builtin_clz)
+			int log2dic = 31 - __builtin_clz(dict_size);
+#elif defined(_MSC_VER)
+			unsigned long log2dic;
+			// No need to check return value when dict_size is proven to have at least 1 bit by this point
+			_BitScanReverse(&log2dic, dict_size);
+#else
+			unsigned int log2dic;
+			for (log2dic = 29U; log2dic >= 12U; log2dic--) {
+				if (dict_size & (1U << log2dic))
+					break;
+			}
+#endif
+			if (dict_size > (1U << log2dic)) {
+				log2dic++;
+				wedges = ((1U << log2dic) - dict_size) >> (log2dic - 4);
+			}
+			else
+				wedges = 0;
+			ds = (((wedges << 5) & 0xe0) | (log2dic & 0x1f));
 		}
-		if (dict_size > (1 << log2dic)) {
-			log2dic++;
-			wedges =
-			    ((1 << log2dic) - dict_size) / (1 << (log2dic - 4));
-		} else
-			wedges = 0;
-		ds = ((wedges << 5) & 0xe0) | (log2dic & 0x1f);
 
 		xz->crc32 = 0;
 		/* Make a header */
@@ -265,7 +278,7 @@ archive_compressor_xz_init_stream(struct archive_write_filter *f,
 		xz->compressed[2] = 0x49;
 		xz->compressed[3] = 0x50;
 		xz->compressed[4] = 1;/* Version */
-		xz->compressed[5] = (unsigned char)ds;
+		xz->compressed[5] = ds;
 		xz->stream.next_out += 6;
 		xz->stream.avail_out -= 6;
 

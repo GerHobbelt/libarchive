@@ -41,8 +41,10 @@
 #ifdef HAVE_STRING_H
 #include <string.h>
 #endif
-#ifdef HAVE_ZLIB_H
-#include <zlib.h>
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
+#include <zlib.h> /* for crc32 and adler32 */
 #endif
 #ifdef HAVE_LZMA_H
 #include <lzma.h>
@@ -379,7 +381,6 @@ __archive_mktempx(const char *tmpdir, wchar_t *template)
 		}
 		fd = _open_osfhandle((intptr_t)h, _O_BINARY | _O_RDWR);
 		if (fd == -1) {
-			la_dosmaperr(GetLastError());
 			CloseHandle(h);
 			goto exit_tmpfile;
 		} else

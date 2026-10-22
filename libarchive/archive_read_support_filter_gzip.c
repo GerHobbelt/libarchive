@@ -40,8 +40,10 @@
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
-#ifdef HAVE_ZLIB_H
-#include <zlib.h>
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
+#include <zlib.h> /* for crc32 and adler32 */
 #endif
 
 #include "archive.h"
@@ -52,7 +54,7 @@
 
 #ifdef HAVE_ZLIB_H
 struct gzip {
-	z_stream	 stream;
+	zng_stream	 stream;
 	char		 in_stream;
 	unsigned char	*out_block;
 	size_t		 out_block_size;
@@ -362,7 +364,7 @@ consume_header(struct archive_read_filter *f)
 	if (avail > max_in)
 		avail = max_in;
 	gzip->stream.avail_in = (uInt)avail;
-	ret = inflateInit2(&(gzip->stream),
+	ret = zng_inflateInit2(&(gzip->stream),
 	    -15 /* Don't check for zlib header */);
 
 	/* Decipher the error code. */
@@ -404,7 +406,7 @@ consume_trailer(struct archive_read_filter *f)
 	const unsigned char *p;
 
 	gzip->in_stream = 0;
-	switch (inflateEnd(&(gzip->stream))) {
+	switch (zng_inflateEnd(&(gzip->stream))) {
 	case Z_OK:
 		break;
 	default:
@@ -416,8 +418,12 @@ consume_trailer(struct archive_read_filter *f)
 
 	/* GZip trailer is a fixed 8 byte structure. */
 	p = __archive_read_filter_ahead(f->upstream, 8, NULL);
-	if (p == NULL)
+	if (p == NULL) {
+		archive_set_error(&f->archive->archive,
+		    ARCHIVE_ERRNO_MISC,
+		    "Truncated gzip input");
 		return (ARCHIVE_FATAL);
+	}
 
 	/* XXX TODO: Verify the length and CRC. */
 
@@ -473,7 +479,7 @@ gzip_filter_read(struct archive_read_filter *f, const void **p)
 		gzip->stream.avail_in = (uInt)avail_in;
 
 		/* Decompress and consume some of that data. */
-		ret = inflate(&(gzip->stream), 0);
+		ret = zng_inflate(&(gzip->stream), 0);
 		switch (ret) {
 		case Z_OK: /* Decompressor made some progress. */
 			__archive_read_filter_consume(f->upstream,
@@ -518,7 +524,7 @@ gzip_filter_close(struct archive_read_filter *f)
 	ret = ARCHIVE_OK;
 
 	if (gzip->in_stream) {
-		switch (inflateEnd(&(gzip->stream))) {
+		switch (zng_inflateEnd(&(gzip->stream))) {
 		case Z_OK:
 			break;
 		default:

@@ -97,9 +97,6 @@
 #include "archive_private.h"
 #include "archive_read_disk_private.h"
 
-#ifndef HAVE_FCHDIR
-#error fchdir function required.
-#endif
 #ifndef O_BINARY
 #define O_BINARY	0
 #endif
@@ -112,6 +109,18 @@
 #if defined(__hpux) && !defined(HAVE_DIRFD)
 #define dirfd(x) ((x)->__dd_fd)
 #define HAVE_DIRFD
+#endif
+
+#ifndef HAVE_FCHDIR
+/*
+ * Stub function for platforms that do not support fchdir.  This is OK on
+ * platforms with newer *at functions as fchdir isn't used there (e.g. WASI).
+ */
+static int fchdir(int fd)
+{
+	errno = ENOSYS;
+	return -1;
+}
 #endif
 
 /*-
@@ -2115,9 +2124,6 @@ tree_reopen(struct tree *t, const char *path, int restore_time)
 #elif defined(O_SEARCH)
 	/* SunOS */
 	const int o_flag = O_SEARCH;
-#elif defined(__FreeBSD__) && defined(O_EXEC)
-	/* FreeBSD */
-	const int o_flag = O_EXEC;
 #endif
 
 	t->flags = (restore_time != 0)?needsRestoreTimes:0;
@@ -2141,8 +2147,7 @@ tree_reopen(struct tree *t, const char *path, int restore_time)
 	t->stack->flags = needsFirstVisit;
 	t->maxOpenCount = t->openCount = 1;
 	t->initial_dir_fd = open(".", O_RDONLY | O_CLOEXEC);
-#if defined(O_PATH) || defined(O_SEARCH) || \
- (defined(__FreeBSD__) && defined(O_EXEC))
+#if defined(O_PATH) || defined(O_SEARCH)
 	/*
 	 * Most likely reason to fail opening "." is that it's not readable,
 	 * so try again for execute. The consequences of not opening this are

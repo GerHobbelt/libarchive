@@ -9,12 +9,14 @@
 IF(ENABLE_CPIO)
 
   SET(bsdcpio_SOURCES
-    cmdline.c
+    cpio_cmdline.c
     cpio.c
     cpio.h
     cpio_platform.h
     ../libarchive_fe/lafe_err.c
     ../libarchive_fe/lafe_err.h
+    ../libarchive_fe/lafe_explicit_bzero.c
+    ../libarchive_fe/lafe_explicit_bzero.h
     ../libarchive_fe/lafe_getline.c
     ../libarchive_fe/lafe_getline.h
     ../libarchive_fe/lafe_platform.h

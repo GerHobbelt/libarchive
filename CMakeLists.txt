@@ -233,13 +233,14 @@ OPTION(ENABLE_ZSTD "Enable the use of the system zstd library if found" ON)
 OPTION(ENABLE_ZLIB "Enable the use of the system ZLIB library if found" ON)
 OPTION(ENABLE_BZip2 "Enable the use of the system BZip2 library if found" ON)
 OPTION(ENABLE_LIBXML2 "Enable the use of the system libxml2 library if found" ON)
+OPTION(ENABLE_BSDXML "Enable the use of the system bsdxml library if found" ON)
 OPTION(ENABLE_EXPAT "Enable the use of the system EXPAT library if found" ON)
 OPTION(ENABLE_WIN32_XMLLITE "Enable the use of the Windows XmlLite library if found" ON)
 OPTION(ENABLE_PCREPOSIX "Enable the use of the system PCREPOSIX library if found" ON)
 OPTION(ENABLE_PCRE2POSIX "Enable the use of the system PCRE2POSIX library if found" ON)
 OPTION(ENABLE_LIBGCC "Enable the use of the system LibGCC library if found" ON)
 # CNG is used for encrypt/decrypt Zip archives on Windows.
-OPTION(ENABLE_CNG "Enable the use of Windows CNG (Crypto Next Generation) if" ON)
+OPTION(ENABLE_CNG "Enable the use of Windows CNG (Crypto Next Generation) if found" ON)
 
 OPTION(ENABLE_TAR "Enable tar building" ON)
 OPTION(ENABLE_TAR_SHARED "Enable dynamic build of tar" FALSE)
@@ -256,6 +257,9 @@ OPTION(ENABLE_TEST "Enable unit and regression tests" ON)
 OPTION(ENABLE_COVERAGE "Enable code coverage (GCC only, automatically sets ENABLE_TEST to ON)" FALSE)
 OPTION(ENABLE_INSTALL "Enable installing of libraries" ON)
 OPTION(ENABLE_CLANG_TIDY "Enable custom build-time code health checks" OFF)
+if (UNIX)
+	option(ENABLE_LIBNATSPEC "Enable use of libnatspec" ON)
+endif()
 
 IF(WIN32 AND MSVC)
   OPTION(MSVC_USE_STATIC_CRT "Use static CRT" OFF)
@@ -317,8 +321,8 @@ IF("${CMAKE_C_PLATFORM_ID}" MATCHES "^(HP-UX)$")
 ENDIF()
 
 IF(MINGW)
-  ADD_DEFINITIONS(-D__USE_MINGW_ANSI_STDIO)
-  ADD_DEFINITIONS(-D__MINGW_USE_VC2005_COMPAT)
+  ADD_DEFINITIONS(-D__USE_MINGW_ANSI_STDIO=1)
+  ADD_DEFINITIONS(-D__MINGW_USE_VC2005_COMPAT=1)
 ENDIF()
 
 #
@@ -775,7 +779,6 @@ LA_CHECK_INCLUDE_FILE("intsafe.h" HAVE_INTSAFE_H)
 LA_CHECK_INCLUDE_FILE("linux/magic.h" HAVE_LINUX_MAGIC_H)
 LA_CHECK_INCLUDE_FILE("locale.h" HAVE_LOCALE_H)
 LA_CHECK_INCLUDE_FILE("membership.h" HAVE_MEMBERSHIP_H)
-LA_CHECK_INCLUDE_FILE("memory.h" HAVE_MEMORY_H)
 LA_CHECK_INCLUDE_FILE("paths.h" HAVE_PATHS_H)
 LA_CHECK_INCLUDE_FILE("poll.h" HAVE_POLL_H)
 LA_CHECK_INCLUDE_FILE("process.h" HAVE_PROCESS_H)
@@ -792,6 +795,7 @@ LA_CHECK_INCLUDE_FILE("stdio.h" HAVE_STDIO_H)
 LA_CHECK_INCLUDE_FILE("stdlib.h" HAVE_STDLIB_H)
 LA_CHECK_INCLUDE_FILE("string.h" HAVE_STRING_H)
 LA_CHECK_INCLUDE_FILE("strings.h" HAVE_STRINGS_H)
+LA_CHECK_INCLUDE_FILE("sysexits.h" HAVE_SYSEXITS_H)
 LA_CHECK_INCLUDE_FILE("sys/acl.h" HAVE_SYS_ACL_H)
 LA_CHECK_INCLUDE_FILE("sys/cdefs.h" HAVE_SYS_CDEFS_H)
 LA_CHECK_INCLUDE_FILE("sys/extattr.h" HAVE_SYS_EXTATTR_H)
@@ -802,6 +806,7 @@ LA_CHECK_INCLUDE_FILE("sys/param.h" HAVE_SYS_PARAM_H)
 LA_CHECK_INCLUDE_FILE("sys/poll.h" HAVE_SYS_POLL_H)
 LA_CHECK_INCLUDE_FILE("sys/richacl.h" HAVE_SYS_RICHACL_H)
 LA_CHECK_INCLUDE_FILE("sys/select.h" HAVE_SYS_SELECT_H)
+LA_CHECK_INCLUDE_FILE("sys/single_threaded.h" HAVE_SYS_SINGLE_THREADED_H)
 LA_CHECK_INCLUDE_FILE("sys/stat.h" HAVE_SYS_STAT_H)
 LA_CHECK_INCLUDE_FILE("sys/statfs.h" HAVE_SYS_STATFS_H)
 LA_CHECK_INCLUDE_FILE("sys/statvfs.h" HAVE_SYS_STATVFS_H)
@@ -852,7 +857,7 @@ ENDFOREACH (it)
 CHECK_C_SOURCE_COMPILES(
   "#define __EXTENSIONS__ 1
    ${_INCLUDE_FILES}
-   int main() { return 0;}"
+   int main(void) { return 0;}"
  SAFE_TO_DEFINE_EXTENSIONS)
 
 #
@@ -1093,7 +1098,7 @@ MACRO(CHECK_ICONV LIB TRY_ICONV_CONST)
     CHECK_C_SOURCE_COMPILES(
       "#include <stdlib.h>
        #include <iconv.h>
-       int main() {
+       int main(void) {
           ${TRY_ICONV_CONST} char *ccp;
           iconv_t cd = iconv_open(\"\", \"\");
           iconv(cd, &ccp, (size_t *)0, (char **)0, (size_t *)0);
@@ -1148,7 +1153,6 @@ IF(ENABLE_ICONV)
       CHECK_ICONV("libiconv" "const")
       CHECK_ICONV("libiconv" "")
       IF (HAVE_ICONV)
-        SET(HAVE_LIBICONV 1)
         LIST(APPEND ADDITIONAL_LIBS ${LIBICONV_PATH})
       ENDIF(HAVE_ICONV)
     ENDIF(NOT HAVE_ICONV AND LIBICONV_PATH)
@@ -1192,7 +1196,6 @@ ELSE(ENABLE_ICONV)
   # (once enabled).
   UNSET(HAVE_LOCALE_CHARSET CACHE)
   UNSET(HAVE_ICONV CACHE)
-  UNSET(HAVE_LIBICONV CACHE)
   UNSET(HAVE_ICONV_libc_ CACHE)
   UNSET(HAVE_ICONV_libc_const CACHE)
   UNSET(HAVE_ICONV_libiconv_ CACHE)
@@ -1209,7 +1212,7 @@ ENDIF(ENABLE_ICONV)
 # Find Libxml2
 #
 IF(ENABLE_LIBXML2 AND HAVE_ICONV)
-  FIND_PACKAGE(LibXml2)
+  FIND_PACKAGE(LibXml2 2.7.3)
 ELSE()
   SET(LIBXML2_FOUND FALSE)
 ENDIF()
@@ -1236,40 +1239,61 @@ IF(LIBXML2_FOUND)
   CMAKE_POP_CHECK_STATE()	# Restore the state of the variables
 ELSE(LIBXML2_FOUND)
   #
-  # Find Expat
+  # Find XmlLite
   #
-  IF(ENABLE_EXPAT)
-    FIND_PACKAGE(EXPAT)
-  ELSE()
-    SET(EXPAT_FOUND FALSE)
-  ENDIF()
-  IF(EXPAT_FOUND)
-    CMAKE_PUSH_CHECK_STATE()	# Save the state of the variables
-    INCLUDE_DIRECTORIES(${EXPAT_INCLUDE_DIR})
-    LIST(APPEND ADDITIONAL_LIBS ${EXPAT_LIBRARIES})
-    SET(HAVE_LIBEXPAT 1)
-    LA_CHECK_INCLUDE_FILE("expat.h" HAVE_EXPAT_H)
-    CMAKE_POP_CHECK_STATE()	# Restore the state of the variables
-  ELSE(EXPAT_FOUND)
-    IF(WIN32 AND ENABLE_WIN32_XMLLITE)
-      # Check linkage as well; versions of mingw-w64 before v11.0.0
-      # do not contain an import library for xmllite.
-      cmake_push_check_state()
-      SET(CMAKE_REQUIRED_LIBRARIES "xmllite" "uuid")
-      check_c_source_compiles("
-      #include <initguid.h>
-      #include <xmllite.h>
-      int main() {
-        return CreateXmlReader(&IID_IXmlReader, NULL, NULL);
-      }
-      " HAVE_XMLLITE_H)
-      cmake_pop_check_state()
-      IF(HAVE_XMLLITE_H)
-        SET(XMLLITE_FOUND TRUE)
-        LIST(APPEND ADDITIONAL_LIBS "xmllite" "uuid")
-      ENDIF()
-    ENDIF()
-  ENDIF(EXPAT_FOUND)
+  IF(WIN32 AND ENABLE_WIN32_XMLLITE)
+    # Check linkage as well; versions of mingw-w64 before v11.0.0
+    # do not contain an import library for XmlLite.
+    cmake_push_check_state()
+    SET(CMAKE_REQUIRED_LIBRARIES "xmllite" "uuid")
+    check_c_source_compiles("
+    #include <initguid.h>
+    #include <xmllite.h>
+    int main() {
+      return CreateXmlReader(&IID_IXmlReader, NULL, NULL);
+    }
+    " HAVE_XMLLITE_H)
+    cmake_pop_check_state()
+    IF(HAVE_XMLLITE_H)
+      SET(HAVE_LIBXMLLITE 1)
+      SET(XMLLITE_FOUND TRUE)
+      LIST(APPEND ADDITIONAL_LIBS "xmllite" "uuid")
+    ENDIF(HAVE_XMLLITE_H)
+  ENDIF(WIN32 AND ENABLE_WIN32_XMLLITE)
+  IF(NOT XMLLITE_FOUND)
+    #
+    # Find Expat
+    #
+    IF(ENABLE_EXPAT)
+      FIND_PACKAGE(EXPAT)
+    ELSE(ENABLE_EXPAT)
+      SET(EXPAT_FOUND FALSE)
+    ENDIF(ENABLE_EXPAT)
+    IF(EXPAT_FOUND)
+      CMAKE_PUSH_CHECK_STATE()	# Save the state of the variables
+      INCLUDE_DIRECTORIES(${EXPAT_INCLUDE_DIRS})
+      LIST(APPEND CMAKE_REQUIRED_INCLUDES ${EXPAT_INCLUDE_DIR})
+      LIST(APPEND ADDITIONAL_LIBS ${EXPAT_LIBRARIES})
+      SET(HAVE_LIBEXPAT 1)
+      LA_CHECK_INCLUDE_FILE("expat.h" HAVE_EXPAT_H)
+      CMAKE_POP_CHECK_STATE()	# Restore the state of the variables
+    ENDIF(EXPAT_FOUND)
+    #
+    # Find bsdxml
+    #
+    IF(NOT EXPAT_FOUND)
+      IF(ENABLE_BSDXML)
+        FIND_PATH(BSDXML_INCLUDE_DIR NAMES bsdxml.h)
+        FIND_LIBRARY(BSDXML_LIBRARY NAMES bsdxml)
+        IF(BSDXML_INCLUDE_DIR AND BSDXML_LIBRARY)
+          INCLUDE_DIRECTORIES(${BSDXML_INCLUDE_DIR})
+          LIST(APPEND ADDITIONAL_LIBS ${BSDXML_LIBRARY})
+          SET(HAVE_LIBBSDXML 1)
+          LA_CHECK_INCLUDE_FILE("bsdxml.h" HAVE_BSDXML_H)
+        ENDIF(BSDXML_INCLUDE_DIR AND BSDXML_LIBRARY)
+      ENDIF(ENABLE_BSDXML)
+    ENDIF(NOT EXPAT_FOUND)
+  ENDIF(NOT XMLLITE_FOUND)
 ENDIF(LIBXML2_FOUND)
 MARK_AS_ADVANCED(CLEAR LIBXML2_INCLUDE_DIR)
 MARK_AS_ADVANCED(CLEAR LIBXML2_LIBRARIES)
@@ -1484,6 +1508,7 @@ CHECK_FUNCTION_EXISTS_GLIBC(chroot HAVE_CHROOT)
 CHECK_FUNCTION_EXISTS_GLIBC(closefrom HAVE_CLOSEFROM)
 CHECK_FUNCTION_EXISTS_GLIBC(close_range HAVE_CLOSE_RANGE)
 CHECK_FUNCTION_EXISTS_GLIBC(ctime_r HAVE_CTIME_R)
+CHECK_FUNCTION_EXISTS_GLIBC(explicit_bzero HAVE_EXPLICIT_BZERO)
 CHECK_FUNCTION_EXISTS_GLIBC(fchdir HAVE_FCHDIR)
 CHECK_FUNCTION_EXISTS_GLIBC(fchflags HAVE_FCHFLAGS)
 CHECK_FUNCTION_EXISTS_GLIBC(fchmod HAVE_FCHMOD)
@@ -1524,6 +1549,7 @@ CHECK_FUNCTION_EXISTS_GLIBC(lstat HAVE_LSTAT)
 CHECK_FUNCTION_EXISTS_GLIBC(lutimes HAVE_LUTIMES)
 CHECK_FUNCTION_EXISTS_GLIBC(mbrtowc HAVE_MBRTOWC)
 CHECK_FUNCTION_EXISTS_GLIBC(memmove HAVE_MEMMOVE)
+CHECK_FUNCTION_EXISTS_GLIBC(memset_explicit HAVE_MEMSET_EXPLICIT)
 CHECK_FUNCTION_EXISTS_GLIBC(mkdir HAVE_MKDIR)
 CHECK_FUNCTION_EXISTS_GLIBC(mkfifo HAVE_MKFIFO)
 CHECK_FUNCTION_EXISTS_GLIBC(mknod HAVE_MKNOD)
@@ -2173,6 +2199,17 @@ ELSE(ENABLE_ACL)
   SET(ARCHIVE_ACL_SUNOS_NFS4 FALSE)
 ENDIF(ENABLE_ACL)
 
+# LIBNATSPEC
+if (ENABLE_LIBNATSPEC)
+	find_library(LIBNATSPEC NAMES natspec)
+	if (LIBNATSPEC)
+		set(HAVE_LIBNATSPEC 1)
+		LIST(APPEND ADDITIONAL_LIBS ${LIBNATSPEC})
+	else()
+		message(WARNING "-- libnatspec not found; libnatspec support disabled")
+	endif()
+endif()
+
 #
 # Check MD5/RMD160/SHA support
 # NOTE: Crypto checks must be run last before generating config.h
@@ -2195,7 +2232,7 @@ ENDIF()
 SET(OLD_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
 SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -fvisibility=hidden -Werror")
 CHECK_C_SOURCE_COMPILES("void __attribute__((visibility(\"default\"))) foo(void);
-int main() { return 0; }" HAVE_VISIBILITY_ATTR)
+int main(void) { return 0; }" HAVE_VISIBILITY_ATTR)
 IF (HAVE_VISIBILITY_ATTR)
   SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
   ADD_DEFINITIONS(-D__LIBARCHIVE_ENABLE_VISIBILITY)

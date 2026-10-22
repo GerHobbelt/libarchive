@@ -206,11 +206,11 @@ struct lha {
  * LHA header common member offset.
  */
 #define H_METHOD_OFFSET	2	/* Compress type. */
-#define H_ATTR_OFFSET	19	/* DOS attribute. */
+#define H_ATTR_OFFSET	19	/* AmigaDOS or DOS attributes. */
 #define H_LEVEL_OFFSET	20	/* Header Level.  */
 #define H_SIZE		22	/* Minimum header size. */
 
-#define SFX_MAX_READAHEAD	(1024 * 24)
+#define SFX_MAX_READAHEAD	(1024 * 512)
 
 static int      archive_read_format_lha_bid(struct archive_read *, int);
 static int      archive_read_format_lha_options(struct archive_read *,
@@ -316,9 +316,7 @@ lha_check_header_format(const char *h)
 			/* "-lh?-" */
 			if (h[H_METHOD_OFFSET + 3] == 's')
 				break;
-			if (h[H_LEVEL_OFFSET] == 0)
-				return (0);
-			if (h[H_LEVEL_OFFSET] <= 3 && h[H_ATTR_OFFSET] == 0x20)
+			if (h[H_LEVEL_OFFSET] <= 3)
 				return (0);
 		}
 		if (h[H_METHOD_OFFSET + 2] == 'z') {
@@ -591,6 +589,9 @@ archive_read_format_lha_read_header(struct archive_read *a,
 	if (err < ARCHIVE_WARN)
 		return (err);
 
+	if (!lha->directory && archive_strlen(&lha->filename) == 0)
+		if (memcmp(lha->method, "lh0", 3) == 0 && archive_strlen(&lha->dirname) > 0)
+			lha->directory = 1; /* empty directory entry */
 
 	if (!lha->directory && archive_strlen(&lha->filename) == 0)
 		/* The filename has not been set */
@@ -1345,11 +1346,19 @@ lha_read_file_extended_header(struct archive_read *a, struct lha *lha,
 			break;
 		case EXT_FILESIZE:
 			if (datasize == sizeof(uint64_t) * 2) {
-				lha->compsize = archive_le64dec(extdheader);
+				uint64_t compsize, origsize;
+
+				/* Range-check before the conversion to the
+				 * signed type rather than relying on the
+				 * implementation-defined result of it. */
+				compsize = archive_le64dec(extdheader);
 				extdheader += sizeof(uint64_t);
-				lha->origsize = archive_le64dec(extdheader);
-				if (lha->compsize < 0 || lha->origsize < 0)
+				origsize = archive_le64dec(extdheader);
+				if (compsize > INT64_MAX ||
+				    origsize > INT64_MAX)
 					goto invalid;
+				lha->compsize = (int64_t)compsize;
+				lha->origsize = (int64_t)origsize;
 			}
 			break;
 		case EXT_CODEPAGE:
@@ -1554,7 +1563,7 @@ lha_read_data_lzh(struct archive_read *a, const void **buff,
     size_t *size, int64_t *offset)
 {
 	struct lha *lha = a->format->data;
-	ssize_t bytes_avail;
+	ssize_t bytes_avail, max_in;
 	int r;
 
 	/* If we haven't yet read any data, initialize the decompressor. */
@@ -1600,6 +1609,17 @@ lha_read_data_lzh(struct archive_read *a, const void **buff,
 	}
 	if (bytes_avail > lha->entry_bytes_remaining)
 		bytes_avail = (ssize_t)lha->entry_bytes_remaining;
+
+	/* Setup buffer boundaries.  strm.avail_in is an int, and the
+	 * compressed size it is bounded by comes straight from the LHa
+	 * header, so clamp the available byte count before the
+	 * assignment. */
+	if (INT_MAX >= SSIZE_MAX)
+		max_in = SSIZE_MAX;
+	else
+		max_in = INT_MAX;
+	if (bytes_avail > max_in)
+		bytes_avail = max_in;
 
 	lha->strm.avail_in = (int)bytes_avail;
 	lha->strm.total_in = 0;

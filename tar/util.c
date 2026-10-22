@@ -40,7 +40,10 @@
 #define	iswprint isprint
 #endif
 
+#include <inttypes.h>
+
 #include "bsdtar.h"
+#include "lafe_explicit_bzero.h"
 #include "lafe_err.h"
 #include "passphrase.h"
 
@@ -59,77 +62,21 @@ static const char *strip_components(const char *path, int elements);
  * #endif
  */
 
-/*
- * Print a string, taking care with any non-printable characters.
- *
- * Note that we use a stack-allocated buffer to receive the formatted
- * string if we can.  This is partly performance (avoiding a call to
- * malloc()), partly out of expedience (we have to call vsnprintf()
- * before malloc() anyway to find out how big a buffer we need; we may
- * as well point that first call at a small local buffer in case it
- * works).
- */
+/* Print a string, taking care of any non-printable characters. */
 
 void
-safe_fprintf(FILE * restrict f, const char * restrict fmt, ...)
+safe_fputs(const char * restrict s, FILE * restrict f)
 {
-	char fmtbuff_stack[256]; /* Place to format the printf() string. */
 	char outbuff[256]; /* Buffer for outgoing characters. */
-	char *fmtbuff_heap; /* If fmtbuff_stack is too small, we use malloc */
-	char *fmtbuff;  /* Pointer to fmtbuff_stack or fmtbuff_heap. */
-	size_t fmtbuff_length;
-	int length, n;
-	va_list ap;
+	int n;
 	const char *p;
-	size_t i;
+	size_t i, length;
 	wchar_t wc;
 	char try_wc;
 
-	/* Use a stack-allocated buffer if we can, for speed and safety. */
-	memset(fmtbuff_stack, '\0', sizeof(fmtbuff_stack));
-	fmtbuff_heap = NULL;
-	fmtbuff_length = sizeof(fmtbuff_stack);
-	fmtbuff = fmtbuff_stack;
-
-	/* Try formatting into the stack buffer. */
-	va_start(ap, fmt);
-	length = vsnprintf(fmtbuff, fmtbuff_length, fmt, ap);
-	va_end(ap);
-
-	/* If vsnprintf will always fail, stop early. */
-	if (length < 0 && errno == EOVERFLOW)
+	if (s == NULL) {
+		fputs("(null)", f);
 		return;
-
-	/* If the result was too large, allocate a buffer on the heap. */
-	while (length < 0 || (size_t)length >= fmtbuff_length) {
-		if (length >= 0 && (size_t)length >= fmtbuff_length)
-			fmtbuff_length = (size_t)length + 1;
-		else if (fmtbuff_length < 8192)
-			fmtbuff_length *= 2;
-		else if (fmtbuff_length < 1000000)
-			fmtbuff_length += fmtbuff_length / 4;
-		else {
-			fmtbuff[fmtbuff_length - 1] = '\0';
-			length = (int)strlen(fmtbuff);
-			break;
-		}
-		free(fmtbuff_heap);
-		fmtbuff_heap = malloc(fmtbuff_length);
-
-		/* Reformat the result into the heap buffer if we can. */
-		if (fmtbuff_heap != NULL) {
-			fmtbuff = fmtbuff_heap;
-			va_start(ap, fmt);
-			length = vsnprintf(fmtbuff, fmtbuff_length, fmt, ap);
-			va_end(ap);
-		} else {
-			/* Leave fmtbuff pointing to the truncated
-			 * string in fmtbuff_stack. */
-			fmtbuff_stack[sizeof(fmtbuff_stack) - 1] = '\0';
-			fmtbuff = fmtbuff_stack;
-			length = (int)strlen(fmtbuff);
-			break;
-		}
 	}
 
 	/* Note: mbrtowc() has a cleaner API, but mbtowc() seems a bit
@@ -137,14 +84,23 @@ safe_fprintf(FILE * restrict f, const char * restrict fmt, ...)
 	if (mbtowc(NULL, NULL, 1) == -1) { /* Reset the shift state. */
 		/* mbtowc() should never fail in practice, but
 		 * handle the theoretical error anyway. */
-		free(fmtbuff_heap);
 		return;
 	}
 
+	p = s;
+
+	/* Directly print as many ASCII characters as possible. */
+	if (mbtowc(NULL, NULL, 0) == 0) {
+		while (*p != '\0' && isprint((unsigned char)*p) &&
+		    (unsigned char)*p < 128 && *p != '\\')
+			p++;
+		fwrite(s, 1, p - s, f);
+	}
+
 	/* Write data, expanding unprintable characters. */
-	p = fmtbuff;
 	i = 0;
 	try_wc = 1;
+	length = strlen(p);
 	while (*p != '\0') {
 
 		/* Convert to wide char, test if the wide
@@ -170,16 +126,11 @@ safe_fprintf(FILE * restrict f, const char * restrict fmt, ...)
 
 		/* If our output buffer is full, dump it and keep going. */
 		if (i > (sizeof(outbuff) - 128)) {
-			outbuff[i] = '\0';
-			fprintf(f, "%s", outbuff);
+			fwrite(outbuff, 1, i, f);
 			i = 0;
 		}
 	}
-	outbuff[i] = '\0';
-	fprintf(f, "%s", outbuff);
-
-	/* If we allocated a heap-based formatting buffer, free it now. */
-	free(fmtbuff_heap);
+	fwrite(outbuff, 1, i, f);
 }
 
 /*
@@ -472,16 +423,100 @@ strip_absolute_path(struct bsdtar *bsdtar, const char *p)
  *
  * TODO: Support pax-style regex path rewrites.
  */
+
+#if defined(_WIN32) && !defined(__CYGWIN__)
+static const char* _utf16_to_utf8(const wchar_t *src, char *out)
+{
+	char *p = out;
+	wchar_t c;
+	while((c = *src++) != 0) {
+		if(c <= 0x7f) {
+			*p++ = c;
+		} else if(c <= 0x7ff) {
+			*p++ = 0xc0 | (c >> 6);
+			*p++ = 0x80 | (c & 0x3f);
+		} else if(c < 0xd800 || c >= 0xe000) {
+			*p++ = 0xe0 | (c >> 12);
+			*p++ = 0x80 | ((c >> 6) & 0x3f);
+			*p++ = 0x80 | (c & 0x3f);
+		} else if(c >= 0xd800 && c <= 0xdfff) {
+			wchar_t c2 = *src++;
+			unsigned long u = ((c & 0x3ff) << 10) | (c2 & 0x3ff);
+			*p++ = 0xf0 | (u >> 18);
+			*p++ = 0x80 | ((u >> 12) & 0x3f);
+			*p++ = 0x80 | ((u >> 6) & 0x3f);
+			*p++ = 0x80 | (u & 0x3f);
+		}
+	}
+	*p = 0;
+	return out;
+}
+
+static const wchar_t* _utf8_to_utf16(const char *src, wchar_t *out) {
+	wchar_t *p = out;
+	unsigned char c;
+	while((c = (unsigned char) *src++) != 0) {
+		if(c <= 0x7f) {
+			*p++ = c;
+		} else if((c & 0xe0) == 0xc0) {
+			*p++ = ((c & 0x1f) << 6) | (*src++ & 0x3f);
+		} else if((c & 0xf0) == 0xe0) {
+			unsigned int c2 = (unsigned char) (*src++) & 0x3f;
+			unsigned int c3 = (unsigned char) (*src++) & 0x3f;
+			unsigned int u = ((c & 0xf) << 12) | (c2 << 6) | c3;
+			*p++ = (wchar_t) u;
+		} else if((c & 0xf8) == 0xf0) {
+			unsigned int c2 = (unsigned char) (*src++) & 0x3f;
+			unsigned int c3 = (unsigned char) (*src++) & 0x3f;
+			unsigned int c4 = (unsigned char) (*src++) & 0x3f;
+			unsigned int u = ((c & 0x7) << 18) | (c2 << 12) | (c3 << 6) | c4;
+			*p++ = 0xd800 | (u >> 10);
+			*p++ = 0xdc00 | (u & 0x3ff);
+		}
+	}
+	*p = 0;
+	return out;
+}
+
+static const char* archive_entry_pathname_n(struct archive_entry *entry, const wchar_t **wname, char *buf)
+{
+	return ((*wname = archive_entry_pathname_w(entry)) != 0)? _utf16_to_utf8(*wname, buf): archive_entry_pathname(entry);
+}
+
+static void archive_entry_copy_pathname_n(struct archive_entry *entry, const char *name, const wchar_t *wname)
+{
+	if(wname) { // name is UTF-8
+		wchar_t buf[4096];
+		archive_entry_copy_pathname_w(entry, _utf8_to_utf16(name, buf));
+	} else {
+		archive_entry_copy_pathname(entry, name);
+	}
+}
+#else
+#define archive_entry_pathname_n(e, w, b) archive_entry_pathname(e)
+#define archive_entry_copy_pathname_n(e, n, w) archive_entry_copy_pathname(entry, name)
+#endif
+
 int
 edit_pathname(struct bsdtar *bsdtar, struct archive_entry *entry)
 {
-	const char *name = archive_entry_pathname(entry);
+#if defined(_WIN32) && !defined(__CYGWIN__)
+	const wchar_t *wname = archive_entry_pathname_w(entry);
+	char name_buffer[4096];
+#endif
+	const char *name = archive_entry_pathname_n(entry, &wname, name_buffer);
 	const char *original_name = name;
 	const char *hardlinkname = archive_entry_hardlink(entry);
 	const char *original_hardlinkname = hardlinkname;
 #if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H) || defined(HAVE_PCRE2POSIX_H)
 	char *subst_name;
 	int r;
+
+	/* Check if entry pathname can be processed. */
+	if (name == NULL) {
+		lafe_warnc(0, "Archive entry has empty or unreadable filename ... skipping");
+		return 1;
+	}
 
 	/* Apply user-specified substitution to pathname. */
 	r = apply_substitution(bsdtar, name, &subst_name, 0, 0);
@@ -490,13 +525,13 @@ edit_pathname(struct bsdtar *bsdtar, struct archive_entry *entry)
 		return 1;
 	}
 	if (r == 1) {
-		archive_entry_copy_pathname(entry, subst_name);
+		archive_entry_copy_pathname_n(entry, subst_name, wname);
 		if (*subst_name == '\0') {
 			free(subst_name);
 			return -1;
 		} else
 			free(subst_name);
-		name = archive_entry_pathname(entry);
+		name = archive_entry_pathname_n(entry, &wname, name_buffer);
 		original_name = name;
 	}
 
@@ -567,7 +602,7 @@ edit_pathname(struct bsdtar *bsdtar, struct archive_entry *entry)
 
 	/* Replace name in archive_entry. */
 	if (name != original_name) {
-		archive_entry_copy_pathname(entry, name);
+		archive_entry_copy_pathname_n(entry, name, wname);
 	}
 	if (hardlinkname != original_hardlinkname) {
 		archive_entry_copy_hardlink(entry, hardlinkname);
@@ -651,7 +686,7 @@ void
 passphrase_free(char *ppbuff)
 {
 	if (ppbuff != NULL) {
-		memset(ppbuff, 0, PPBUFF_SIZE);
+		explicit_bzero(ppbuff, PPBUFF_SIZE);
 		free(ppbuff);
 	}
 }
@@ -665,7 +700,8 @@ passphrase_free(char *ppbuff)
  * and 'pax -l' is documented as using the same format as 'ls -l'.
  */
 void
-list_item_verbose(struct bsdtar *bsdtar, FILE *out, struct archive_entry *entry)
+list_item_verbose(struct bsdtar *bsdtar, FILE *out, struct archive_entry *entry
+				  , int exact_time)
 {
 	char			 tmp[100];
 	size_t			 w;
@@ -676,7 +712,7 @@ list_item_verbose(struct bsdtar *bsdtar, FILE *out, struct archive_entry *entry)
 	time_t			 tim;
 	static time_t		 now;
 	struct tm		*ltime;
-#if defined(HAVE_LOCALTIME_R) || defined(HAVE_LOCALTIME_S)
+#if defined(HAVE_LOCALTIME_R) || defined(HAVE_LOCALTIME_S) || defined(HAVE__LOCALTIME64_S)
 	struct tm		tmbuf;
 #endif
 
@@ -750,30 +786,45 @@ list_item_verbose(struct bsdtar *bsdtar, FILE *out, struct archive_entry *entry)
 #else
 #define	DAY_FMT  "%e"  /* Day number without leading zeros */
 #endif
-	if (age < -HALF_YEAR || age > HALF_YEAR)
-		fmt = bsdtar->day_first ? DAY_FMT " %b  %Y" : "%b " DAY_FMT "  %Y";
-	else
-		fmt = bsdtar->day_first ? DAY_FMT " %b %H:%M" : "%b " DAY_FMT " %H:%M";
-#if defined(HAVE_LOCALTIME_S)
-	ltime = localtime_s(&tmbuf, &tim) ? NULL : &tmbuf;
-#elif defined(HAVE_LOCALTIME_R)
-	ltime = localtime_r(&tim, &tmbuf);
-#else
-	ltime = localtime(&tim);
-#endif
-	if (ltime) {
-		sw = strftime(tmp, sizeof(tmp), fmt, ltime);
-		p = tmp;
+	if (exact_time) {
+		safe_fprintf(out, " 0x%016" PRIx64 " 0x%08" PRIx32 " ", (uint64_t)archive_entry_mtime(entry), (uint32_t)archive_entry_mtime_nsec(entry));
+	} else {
+		if (age < -HALF_YEAR || age > HALF_YEAR)
+			fmt = bsdtar->day_first ? DAY_FMT " %b  %Y" : "%b " DAY_FMT "  %Y";
+		else
+			fmt = bsdtar->day_first ? DAY_FMT " %b %H:%M" : "%b " DAY_FMT " %H:%M";
+	#if defined(HAVE_LOCALTIME_S)
+		ltime = localtime_s(&tmbuf, &tim) ? NULL : &tmbuf;
+	#elif defined(HAVE_LOCALTIME_R)
+		ltime = localtime_r(&tim, &tmbuf);
+	#elif defined(HAVE__LOCALTIME64_S)
+		time_t tmptime = tim;
+		errno_t terr = _localtime64_s(&tmbuf, &tmptime);
+		if (terr)
+			ltime = NULL;
+		else
+			ltime = &tmbuf;
+	#else
+		ltime = localtime(&tim);
+	#endif
+		if (ltime) {
+			sw = strftime(tmp, sizeof(tmp), fmt, ltime);
+			p = tmp;
+		}
+		if (!ltime || !sw)
+			p = "-- -- ----";
+		fprintf(out, " %s ", p);
 	}
-	if (!ltime || !sw)
-		p = "-- -- ----";
-	fprintf(out, " %s ", p);
-	safe_fprintf(out, "%s", archive_entry_pathname(entry));
+	safe_fputs(archive_entry_pathname(entry), out);
 
 	/* Extra information for links. */
-	if (archive_entry_hardlink(entry)) /* Hard link */
-		safe_fprintf(out, " link to %s",
-		    archive_entry_hardlink(entry));
-	else if (archive_entry_symlink(entry)) /* Symbolic link */
-		safe_fprintf(out, " -> %s", archive_entry_symlink(entry));
+	if (archive_entry_hardlink(entry)) {
+		/* Hard link */
+		fputs(" link to ", out);
+		safe_fputs(archive_entry_hardlink(entry), out);
+	} else if (archive_entry_symlink(entry)) {
+		/* Symbolic link */
+		fputs(" -> ", out);
+		safe_fputs(archive_entry_symlink(entry), out);
+	}
 }

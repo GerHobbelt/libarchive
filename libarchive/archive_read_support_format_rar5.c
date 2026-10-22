@@ -30,8 +30,10 @@
 #include <errno.h>
 #endif
 #include <time.h>
-#ifdef HAVE_ZLIB_H
-#include <zlib.h> /* crc32 */
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
+#include <zlib.h> /* for crc32 and adler32 */
 #endif
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
@@ -99,6 +101,9 @@ static const size_t g_unpack_window_size = 0x20000;
  * Visual Studio. */
 #define MAX_NAME_IN_CHARS 2048
 #define MAX_NAME_IN_BYTES (4 * MAX_NAME_IN_CHARS)
+
+/* maximum header size for RAR5 is 2MB */
+#define MAX_HEADER_SIZE (2 * 1024 * 1024)
 
 struct file_header {
 	ssize_t bytes_remaining;
@@ -414,7 +419,7 @@ static int cdeque_init(struct cdeque* d, int max_capacity_power_of_2) {
 		return CDE_PARAM;
 
 	cdeque_clear(d);
-	d->arr = malloc(sizeof(void*) * max_capacity_power_of_2);
+	d->arr = malloc(sizeof(size_t*) * max_capacity_power_of_2);
 
 	return d->arr ? CDE_OK : CDE_ALLOC;
 }
@@ -932,9 +937,11 @@ static int consume(struct archive_read* a, int64_t how_many) {
  * the number of bytes that `pvalue_len` value contains. If the `pvalue_len`
  * is NULL, this consuming operation is done automatically.
  *
- * Returns 1 if *pvalue was successfully read.
- * Returns 0 if there was an error. In this case, *pvalue contains an
- *           invalid value.
+ * In case of error (!ARCHIVE_OK), *pvalue contains an invalid value.
+ *
+ * Returns ARCHIVE_OK if *pvalue was successfully read.
+ * Returns ARCHIVE_FATAL if there was an error.
+ * Returns ARCHIVE_EOF if end of file was reached.
  */
 
 static int read_var(struct archive_read* a, uint64_t* pvalue,
@@ -942,16 +949,36 @@ static int read_var(struct archive_read* a, uint64_t* pvalue,
 {
 	uint64_t multiplier;
 	uint64_t result = 0;
-	size_t i;
+	size_t i, max_bytes;
+	ssize_t avail;
 	const uint8_t* p;
 
-	/* We will read maximum of 10 bytes. We don't have to handle the
-	 * situation to read the RAR5 variable-sized value stored at the end of
-	 * the file, because such situation will never happen. */
-	if(!read_ahead(a, 10, &p))
-		return 0;
+	/* We will read a maximum of 10 bytes, since that's the longest a
+	 * RAR5 varint can legally be. Ask for a full 10-byte lookahead
+	 * first, since that's the common case. However, a varint is
+	 * self-terminating (a byte with the MSB clear ends the value, so
+	 * most varints take far fewer than 10 bytes), and it's legal for
+	 * one to end fewer than 10 bytes before the end of the archive --
+	 * e.g. a file header's extra field butting up against ENDARC with
+	 * no padding. If a full 10-byte lookahead isn't available, fall
+	 * back to however many bytes actually remain and decode within
+	 * that instead of failing outright; only reaching the real end of
+	 * the archive with zero bytes left, or exhausting the available
+	 * bytes without hitting a terminator, is a genuine error. */
+	max_bytes = 10;
+	p = __archive_read_ahead(a, max_bytes, &avail);
+	if(p == NULL) {
+		if(avail == 0)
+			return ARCHIVE_EOF;
+		if(avail < 1)
+			return ARCHIVE_FATAL;
+		max_bytes = (size_t)avail;
+		p = __archive_read_ahead(a, max_bytes, NULL);
+		if(p == NULL)
+			return ARCHIVE_FATAL;
+	}
 
-	for(multiplier = 1, i = 0; i < 10; i++, multiplier *= 128) {
+	for(multiplier = 1, i = 0; i < max_bytes; i++, multiplier *= 128) {
 		uint64_t val;
 		uint8_t b;
 
@@ -962,7 +989,9 @@ static int read_var(struct archive_read* a, uint64_t* pvalue,
 		if(archive_ckd_mul_u64(&val, b & 0x7F, multiplier) ||
 		   archive_ckd_add_u64(&result, result, val)) {
 			/* Integer overflow occurred. */
-			return 0;
+			archive_set_error(&a->archive,
+			    ARCHIVE_ERRNO_FILE_FORMAT, "Number too large");
+			return ARCHIVE_FATAL;
 		}
 
 		/* MSB set to 1 means we need to continue decoding process.
@@ -988,17 +1017,19 @@ static int read_var(struct archive_read* a, uint64_t* pvalue,
 				 * needs to consume. This is why we handle
 				 * such situation here automatically. */
 				if(ARCHIVE_OK != consume(a, 1 + i)) {
-					return 0;
+					return ARCHIVE_FATAL;
 				}
 			}
 
 			/* End of decoding process, return success. */
-			return 1;
+			return ARCHIVE_OK;
 		}
 	}
 
-	/* All continuation bits were set. This is an error. */
-	return 0;
+	/* Either all 10 bytes had their continuation bit set (a malformed
+	 * varint), or fewer than 10 bytes were available and none of them
+	 * terminated the value (a truncated archive). Both are errors. */
+	return ARCHIVE_FATAL;
 }
 
 static int read_var_sized(struct archive_read* a, size_t* pvalue,
@@ -1007,10 +1038,17 @@ static int read_var_sized(struct archive_read* a, size_t* pvalue,
 	uint64_t v;
 	uint64_t v_size = 0;
 
-	const int ret = pvalue_len ? read_var(a, &v, &v_size)
-				   : read_var(a, &v, NULL);
+	int ret = pvalue_len ? read_var(a, &v, &v_size)
+			     : read_var(a, &v, NULL);
+#if UINT64_MAX > SIZE_MAX
+	if(ret == ARCHIVE_OK && v > SIZE_MAX) {
+		archive_set_error(&a->archive,
+		    ARCHIVE_ERRNO_FILE_FORMAT, "Number too large");
+		ret = ARCHIVE_FATAL;
+	}
+#endif
 
-	if(ret == 1 && pvalue) {
+	if(ret == ARCHIVE_OK && pvalue) {
 		*pvalue = (size_t) v;
 	}
 
@@ -1220,26 +1258,30 @@ static int process_main_locator_extra_block(struct archive_read* a,
     struct rar5 *rar5)
 {
 	uint64_t locator_flags;
+	int r;
 
 	enum LOCATOR_FLAGS {
 		QLIST = 0x01, RECOVERY = 0x02,
 	};
 
-	if(!read_var(a, &locator_flags, NULL)) {
-		return ARCHIVE_EOF;
+	r = read_var(a, &locator_flags, NULL);
+	if(r != ARCHIVE_OK) {
+		return r;
 	}
 
 	if(locator_flags & QLIST) {
-		if(!read_var(a, &rar5->qlist_offset, NULL)) {
-			return ARCHIVE_EOF;
+		r = read_var(a, &rar5->qlist_offset, NULL);
+		if(r != ARCHIVE_OK) {
+			return r;
 		}
 
 		/* qlist is not used */
 	}
 
 	if(locator_flags & RECOVERY) {
-		if(!read_var(a, &rar5->rr_offset, NULL)) {
-			return ARCHIVE_EOF;
+		r = read_var(a, &rar5->rr_offset, NULL);
+		if(r != ARCHIVE_OK) {
+			return r;
 		}
 
 		/* rr is not used */
@@ -1253,13 +1295,15 @@ static int parse_file_extra_hash(struct archive_read* a, struct rar5 *rar5,
 {
 	size_t hash_type = 0;
 	size_t value_len;
+	int r;
 
 	enum HASH_TYPE {
 		BLAKE2sp = 0x00
 	};
 
-	if(!read_var_sized(a, &hash_type, &value_len))
-		return ARCHIVE_EOF;
+	r = read_var_sized(a, &hash_type, &value_len);
+	if(r != ARCHIVE_OK)
+		return r;
 
 	*extra_data_size -= value_len;
 	if(ARCHIVE_OK != consume(a, value_len)) {
@@ -1323,17 +1367,20 @@ static int parse_file_extra_version(struct archive_read* a,
 	struct archive_string version_string;
 	struct archive_string name_utf8_string;
 	const char* cur_filename;
+	int r;
 
 	/* Flags are ignored. */
-	if(!read_var_sized(a, &flags, &value_len))
-		return ARCHIVE_EOF;
+	r = read_var_sized(a, &flags, &value_len);
+	if(r != ARCHIVE_OK)
+		return r;
 
 	*extra_data_size -= value_len;
 	if(ARCHIVE_OK != consume(a, value_len))
 		return ARCHIVE_EOF;
 
-	if(!read_var_sized(a, &version, &value_len))
-		return ARCHIVE_EOF;
+	r = read_var_sized(a, &version, &value_len);
+	if(r != ARCHIVE_OK)
+		return r;
 
 	*extra_data_size -= value_len;
 	if(ARCHIVE_OK != consume(a, value_len))
@@ -1384,8 +1431,9 @@ static int parse_file_extra_htime(struct archive_read* a,
 		HAS_UNIX_NS   = 0x10,
 	};
 
-	if(!read_var_sized(a, &flags, &value_len))
-		return ARCHIVE_EOF;
+	ret = read_var_sized(a, &flags, &value_len);
+	if(ret != ARCHIVE_OK)
+		return ret;
 
 	*extra_data_size -= value_len;
 	if(ARCHIVE_OK != consume(a, value_len)) {
@@ -1466,24 +1514,27 @@ static int parse_file_extra_redir(struct archive_read* a,
 	size_t target_size = 0;
 	char target_utf8_buf[MAX_NAME_IN_BYTES];
 	const uint8_t* p;
+	int r;
 
-	if(!read_var(a, &rar5->file.redir_type, &value_size))
-		return ARCHIVE_EOF;
+	r = read_var(a, &rar5->file.redir_type, &value_size);
+	if(r != ARCHIVE_OK)
+		return r;
 	if(ARCHIVE_OK != consume(a, (int64_t)value_size))
 		return ARCHIVE_EOF;
 	*extra_data_size -= value_size;
 
-	if(!read_var(a, &rar5->file.redir_flags, &value_size))
-		return ARCHIVE_EOF;
+	r = read_var(a, &rar5->file.redir_flags, &value_size);
+	if(r != ARCHIVE_OK)
+		return r;
 	if(ARCHIVE_OK != consume(a, (int64_t)value_size))
 		return ARCHIVE_EOF;
 	*extra_data_size -= value_size;
 
-	if(!read_var_sized(a, &target_size, &varint_len))
-		return ARCHIVE_EOF;
+	r = read_var_sized(a, &target_size, &varint_len);
+	if(r != ARCHIVE_OK)
+		return r;
 	if(ARCHIVE_OK != consume(a, (int64_t)varint_len))
 		return ARCHIVE_EOF;
-	*extra_data_size -= (int64_t)(target_size + varint_len);
 
 	if(target_size > (MAX_NAME_IN_CHARS - 1)) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
@@ -1496,6 +1547,14 @@ static int parse_file_extra_redir(struct archive_read* a,
 		    "No link target specified");
 		return ARCHIVE_FATAL;
 	}
+
+	if((int64_t)(target_size + varint_len) > *extra_data_size) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
+		    "Extra data size is too small for link target");
+		return ARCHIVE_FATAL;
+	}
+
+	*extra_data_size -= (int64_t)(target_size + varint_len);
 
 	if(!read_ahead(a, target_size, &p))
 		return ARCHIVE_EOF;
@@ -1543,16 +1602,19 @@ static int parse_file_extra_owner(struct archive_read* a,
 	size_t varint_len = 0;
 	char namebuf[OWNER_MAXNAMELEN];
 	const uint8_t* p;
+	int r;
 
-	if(!read_var(a, &flags, &value_size))
-		return ARCHIVE_EOF;
+	r = read_var(a, &flags, &value_size);
+	if(r != ARCHIVE_OK)
+		return r;
 	if(ARCHIVE_OK != consume(a, (int64_t)value_size))
 		return ARCHIVE_EOF;
 	*extra_data_size -= value_size;
 
 	if ((flags & OWNER_USER_NAME) != 0) {
-		if(!read_var_sized(a, &name_size, &varint_len))
-			return ARCHIVE_EOF;
+		r = read_var_sized(a, &name_size, &varint_len);
+		if(r != ARCHIVE_OK)
+			return r;
 
 		/* The name cannot be larger than the remaining extra data of
 		 * this field. Rejecting an oversized length here also avoids
@@ -1584,8 +1646,9 @@ static int parse_file_extra_owner(struct archive_read* a,
 		archive_entry_set_uname(e, namebuf);
 	}
 	if ((flags & OWNER_GROUP_NAME) != 0) {
-		if(!read_var_sized(a, &name_size, &varint_len))
-			return ARCHIVE_EOF;
+		r = read_var_sized(a, &name_size, &varint_len);
+		if(r != ARCHIVE_OK)
+			return r;
 
 		if(*extra_data_size < 0 ||
 		    name_size > (uint64_t)*extra_data_size) {
@@ -1614,8 +1677,9 @@ static int parse_file_extra_owner(struct archive_read* a,
 		archive_entry_set_gname(e, namebuf);
 	}
 	if ((flags & OWNER_USER_UID) != 0) {
-		if(!read_var(a, &id, &value_size))
-			return ARCHIVE_EOF;
+		r = read_var(a, &id, &value_size);
+		if(r != ARCHIVE_OK)
+			return r;
 		if(ARCHIVE_OK != consume(a, (int64_t)value_size))
 			return ARCHIVE_EOF;
 		*extra_data_size -= value_size;
@@ -1623,8 +1687,9 @@ static int parse_file_extra_owner(struct archive_read* a,
 		archive_entry_set_uid(e, (la_int64_t)id);
 	}
 	if ((flags & OWNER_GROUP_GID) != 0) {
-		if(!read_var(a, &id, &value_size))
-			return ARCHIVE_EOF;
+		r = read_var(a, &id, &value_size);
+		if(r != ARCHIVE_OK)
+			return r;
 		if(ARCHIVE_OK != consume(a, (int64_t)value_size))
 			return ARCHIVE_EOF;
 		*extra_data_size -= value_size;
@@ -1642,20 +1707,24 @@ static int process_head_file_extra(struct archive_read* a,
 	uint64_t var_size;
 
 	while(extra_data_size > 0) {
+		int r;
+
 		/* Make sure we won't fail if the file declares only unsupported
 		attributes. */
 		int ret = ARCHIVE_OK;
 
-		if(!read_var(a, &extra_field_size, &var_size))
-			return ARCHIVE_EOF;
+		r = read_var(a, &extra_field_size, &var_size);
+		if(r != ARCHIVE_OK)
+			return r;
 
 		extra_data_size -= var_size;
 		if(ARCHIVE_OK != consume(a, var_size)) {
 			return ARCHIVE_EOF;
 		}
 
-		if(!read_var(a, &extra_field_id, &var_size))
-			return ARCHIVE_EOF;
+		r = read_var(a, &extra_field_id, &var_size);
+		if(r != ARCHIVE_OK)
+			return r;
 
 		extra_field_size -= var_size;
 		extra_data_size -= var_size;
@@ -1694,6 +1763,12 @@ static int process_head_file_extra(struct archive_read* a,
 				/* fallthrough */
 			default:
 				/* Skip unsupported entry. */
+				if (extra_field_size > (uint64_t)extra_data_size) {
+					archive_set_error(&a->archive,
+					    ARCHIVE_ERRNO_FILE_FORMAT,
+					    "RAR5 extra-field size exceeds remaining extra-field data");
+					return ARCHIVE_FATAL;
+				}
 				extra_data_size -= extra_field_size;
 				if (ARCHIVE_OK != consume(a, extra_field_size)) {
 					return ARCHIVE_EOF;
@@ -1766,6 +1841,7 @@ static int process_head_file(struct archive_read* a, struct rar5 *rar5,
 	char name_utf8_buf[MAX_NAME_IN_BYTES];
 	const uint8_t* p;
 	int sanity_ret;
+	int r;
 
 	enum FILE_FLAGS {
 		DIRECTORY = 0x0001, UTIME = 0x0002, CRC32 = 0x0004,
@@ -1795,16 +1871,32 @@ static int process_head_file(struct archive_read* a, struct rar5 *rar5,
 
 	if(block_flags & HFL_EXTRA_DATA) {
 		uint64_t edata_size = 0;
-		if(!read_var(a, &edata_size, NULL))
-			return ARCHIVE_EOF;
+		r = read_var(a, &edata_size, NULL);
+		if(r != ARCHIVE_OK)
+			return r;
+
+		/* The extra area is part of the file header, which
+		 * process_base_block() has already bounded to MAX_HEADER_SIZE.
+		 * A declared extra-area size larger than that cannot be valid,
+		 * and if left unchecked it is later used as the ceiling for
+		 * the owner/group name length in parse_file_extra_owner(),
+		 * letting a crafted archive drive read_ahead() into an
+		 * attacker-controlled allocation. Reject it here. */
+		if(edata_size > MAX_HEADER_SIZE) {
+			archive_set_error(&a->archive,
+			    ARCHIVE_ERRNO_FILE_FORMAT,
+			    "File extra data size is too large");
+			return ARCHIVE_FATAL;
+		}
 
 		/* Intentional type cast from unsigned to signed. */
 		extra_data_size = (int64_t) edata_size;
 	}
 
 	if(block_flags & HFL_DATA) {
-		if(!read_var_sized(a, &data_size, NULL))
-			return ARCHIVE_EOF;
+		r = read_var_sized(a, &data_size, NULL);
+		if(r != ARCHIVE_OK)
+			return r;
 
 		if(data_size > SSIZE_MAX) {
 			archive_set_error(&a->archive,
@@ -1818,11 +1910,13 @@ static int process_head_file(struct archive_read* a, struct rar5 *rar5,
 		rar5->file.bytes_remaining = 0;
 	}
 
-	if(!read_var_sized(a, &file_flags, NULL))
-		return ARCHIVE_EOF;
+	r = read_var_sized(a, &file_flags, NULL);
+	if(r != ARCHIVE_OK)
+		return r;
 
-	if(!read_var(a, &unpacked_size, NULL))
-		return ARCHIVE_EOF;
+	r = read_var(a, &unpacked_size, NULL);
+	if(r != ARCHIVE_OK)
+		return r;
 
 	if(file_flags & UNKNOWN_UNPACKED_SIZE) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_PROGRAMMER,
@@ -1839,8 +1933,9 @@ static int process_head_file(struct archive_read* a, struct rar5 *rar5,
 		return sanity_ret;
 	}
 
-	if(!read_var_sized(a, &file_attr, NULL))
-		return ARCHIVE_EOF;
+	r = read_var_sized(a, &file_attr, NULL);
+	if(r != ARCHIVE_OK)
+		return r;
 
 	if(file_flags & UTIME) {
 		if(!read_u32(a, &mtime))
@@ -1852,8 +1947,9 @@ static int process_head_file(struct archive_read* a, struct rar5 *rar5,
 			return ARCHIVE_EOF;
 	}
 
-	if(!read_var_sized(a, &compression_info, NULL))
-		return ARCHIVE_EOF;
+	r = read_var_sized(a, &compression_info, NULL);
+	if(r != ARCHIVE_OK)
+		return r;
 
 	c_method = (int) (compression_info >> 7) & 0x7;
 	c_version = (int) (compression_info & 0x3f);
@@ -1944,8 +2040,9 @@ static int process_head_file(struct archive_read* a, struct rar5 *rar5,
 
 	rar5->file.service = 0;
 
-	if(!read_var_sized(a, &host_os, NULL))
-		return ARCHIVE_EOF;
+	r = read_var_sized(a, &host_os, NULL);
+	if(r != ARCHIVE_OK)
+		return r;
 
 	if(host_os == HOST_WINDOWS) {
 		/* Host OS is Windows */
@@ -1996,8 +2093,9 @@ static int process_head_file(struct archive_read* a, struct rar5 *rar5,
 		return ARCHIVE_FATAL;
 	}
 
-	if(!read_var_sized(a, &name_size, NULL))
-		return ARCHIVE_EOF;
+	r = read_var_sized(a, &name_size, NULL);
+	if(r != ARCHIVE_OK)
+		return r;
 
 	if(name_size > (MAX_NAME_IN_CHARS - 1)) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
@@ -2125,14 +2223,17 @@ static int process_head_main(struct archive_read* a, struct rar5 *rar5,
 	(void) entry;
 
 	if(block_flags & HFL_EXTRA_DATA) {
-		if(!read_var(a, &extra_data_size, NULL))
-			return ARCHIVE_EOF;
+		int r;
+		r = read_var(a, &extra_data_size, NULL);
+		if(r != ARCHIVE_OK)
+			return r;
 	} else {
 		extra_data_size = 0;
 	}
 
-	if(!read_var_sized(a, &archive_flags, NULL)) {
-		return ARCHIVE_EOF;
+	ret = read_var_sized(a, &archive_flags, NULL);
+	if(ret != ARCHIVE_OK) {
+		return ret;
 	}
 
 	rar5->main.volume = (archive_flags & VOLUME) > 0;
@@ -2140,8 +2241,9 @@ static int process_head_main(struct archive_read* a, struct rar5 *rar5,
 
 	if(archive_flags & VOLUME_NUMBER) {
 		size_t v = 0;
-		if(!read_var_sized(a, &v, NULL)) {
-			return ARCHIVE_EOF;
+		ret = read_var_sized(a, &v, NULL);
+		if(ret != ARCHIVE_OK) {
+			return ret;
 		}
 
 		if (v > UINT_MAX) {
@@ -2172,12 +2274,14 @@ static int process_head_main(struct archive_read* a, struct rar5 *rar5,
 		return ARCHIVE_OK;
 	}
 
-	if(!read_var_sized(a, &extra_field_size, NULL)) {
-		return ARCHIVE_EOF;
+	ret = read_var_sized(a, &extra_field_size, NULL);
+	if(ret != ARCHIVE_OK) {
+		return ret;
 	}
 
-	if(!read_var_sized(a, &extra_field_id, NULL)) {
-		return ARCHIVE_EOF;
+	ret = read_var_sized(a, &extra_field_id, NULL);
+	if(ret != ARCHIVE_OK) {
+		return ret;
 	}
 
 	if(extra_field_size == 0) {
@@ -2346,14 +2450,15 @@ static int process_base_block(struct archive_read* a,
 	}
 
 	/* Read header size. */
-	if(!read_var_sized(a, &raw_hdr_size, &hdr_size_len)) {
-		return ARCHIVE_EOF;
+	ret = read_var_sized(a, &raw_hdr_size, &hdr_size_len);
+	if(ret != ARCHIVE_OK) {
+		return ret;
 	}
 
-	/* Sanity check, maximum header size for RAR5 is 2MB.  Bounding
-	 * raw_hdr_size (instead of the sum) also ensures that adding
-	 * hdr_size_len below cannot wrap hdr_size around SIZE_MAX. */
-	if(raw_hdr_size > (2 * 1024 * 1024) - hdr_size_len) {
+	/* Sanity check.  Bounding raw_hdr_size (instead of the sum) also
+	 * ensures that adding hdr_size_len below cannot wrap hdr_size
+	 * around SIZE_MAX. */
+	if(raw_hdr_size > MAX_HEADER_SIZE - hdr_size_len) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
 		    "Base block header is too large");
 
@@ -2399,11 +2504,13 @@ static int process_base_block(struct archive_read* a,
 		return ARCHIVE_EOF;
 	}
 
-	if(!read_var_sized(a, &header_id, NULL))
-		return ARCHIVE_EOF;
+	ret = read_var_sized(a, &header_id, NULL);
+	if(ret != ARCHIVE_OK)
+		return ret;
 
-	if(!read_var_sized(a, &header_flags, NULL))
-		return ARCHIVE_EOF;
+	ret = read_var_sized(a, &header_flags, NULL);
+	if(ret != ARCHIVE_OK)
+		return ret;
 
 	rar5->generic.split_after = (header_flags & HFL_SPLIT_AFTER) > 0;
 	rar5->generic.split_before = (header_flags & HFL_SPLIT_BEFORE) > 0;
@@ -2541,7 +2648,7 @@ static int try_skip_sfx(struct archive_read *a)
 
 		rar5_signature(signature);
 
-		while (total + window <= (1024 * 512)) {
+		while (total + window <= SFX_MAX_READAHEAD) {
 			h = __archive_read_ahead(a, window, &bytes);
 			if (h == NULL) {
 				/* Remaining bytes are less than window. */
@@ -3596,8 +3703,7 @@ static int merge_block(struct archive_read* a, ssize_t block_size,
 	rar5->cstate.switch_multivolume = 1;
 
 	/* Reallocate the memory which will hold the whole block. */
-	if(rar5->vol.push_buf)
-		free((void*) rar5->vol.push_buf);
+	free(rar5->vol.push_buf);
 
 	/* Increasing the allocation block by 8 is due to bit reading functions,
 	 * which are using additional 2 or 4 bytes. Allocating the block size
@@ -4126,6 +4232,13 @@ static int do_unstore_file(struct archive_read* a,
 	size_t to_read;
 	const uint8_t* p;
 
+	/* This function returns without any data on more than one path,
+	 * and the end of the stored data is the position all of them
+	 * should report. */
+	if(buf)    *buf = NULL;
+	if(size)   *size = 0;
+	if(offset) *offset = rar5->cstate.last_unstore_ptr;
+
 	if(rar5->file.bytes_remaining == 0 && rar5->main.volume > 0 &&
 	    rar5->generic.split_after > 0)
 	{
@@ -4344,6 +4457,8 @@ static int rar5_read_data(struct archive_read *a, const void **buff,
 	struct rar5 *rar5 = a->format->data;
 	int ret;
 
+	if (buff)
+		*buff = NULL;
 	if (size)
 		*size = 0;
 
@@ -4379,6 +4494,11 @@ static int rar5_read_data(struct archive_read *a, const void **buff,
 	}
 
 	if(rar5->file.eof == 1) {
+		/* The entry is over; report the end of the unpacked data,
+		 * so that a sparse-file aware caller does not have to
+		 * guess where it is. */
+		if (offset)
+			*offset = rar5->cstate.last_write_ptr;
 		return ARCHIVE_EOF;
 	}
 

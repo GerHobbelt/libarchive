@@ -66,19 +66,9 @@
 #define	O_BINARY 0
 #endif
 
-struct archive_dir_entry {
-	struct archive_dir_entry	*next;
-	time_t			 mtime_sec;
-	int			 mtime_nsec;
-	char			*name;
-};
-
-struct archive_dir {
-	struct archive_dir_entry *head, *tail;
-};
-
 static int		 append_archive(struct bsdtar *, struct archive *,
 			     struct archive *ina);
+static void		 edit_owner(struct bsdtar *, struct archive_entry *);
 static int		 append_archive_filename(struct bsdtar *,
 			     struct archive *, const char *fname);
 static void		 archive_names_from_file(struct bsdtar *bsdtar,
@@ -326,7 +316,7 @@ tar_mode_r(struct bsdtar *bsdtar)
 		    cset_get_format(bsdtar->cset));
 		/* ... complain if it's not compatible. */
 		format &= ARCHIVE_FORMAT_BASE_MASK;
-		if (format != (int)(archive_format(a) & ARCHIVE_FORMAT_BASE_MASK)
+		if (format != (archive_format(a) & ARCHIVE_FORMAT_BASE_MASK)
 		    && format != ARCHIVE_FORMAT_EMPTY) {
 			lafe_errc(1, 0,
 			    "Format %s is incompatible with the archive %s",
@@ -360,11 +350,6 @@ tar_mode_u(struct bsdtar *bsdtar)
 	struct archive		*a;
 	struct archive_entry	*entry;
 	int			 format;
-	struct archive_dir_entry	*p;
-	struct archive_dir	 archive_dir;
-
-	bsdtar->archive_dir = &archive_dir;
-	memset(&archive_dir, 0, sizeof(archive_dir));
 
 	format = ARCHIVE_FORMAT_TAR_PAX_RESTRICTED;
 
@@ -428,14 +413,6 @@ tar_mode_u(struct bsdtar *bsdtar)
 
 	close(bsdtar->fd);
 	bsdtar->fd = -1;
-
-	while (bsdtar->archive_dir->head != NULL) {
-		p = bsdtar->archive_dir->head->next;
-		free(bsdtar->archive_dir->head->name);
-		free(bsdtar->archive_dir->head);
-		bsdtar->archive_dir->head = p;
-	}
-	bsdtar->archive_dir->tail = NULL;
 }
 
 
@@ -698,6 +675,32 @@ append_archive_filename(struct bsdtar *bsdtar, struct archive *a,
 	return (rc);
 }
 
+/*
+ * Apply --uid, --gid, --uname and --gname options.
+ */
+static void
+edit_owner(struct bsdtar *bsdtar, struct archive_entry *entry)
+{
+	if (bsdtar->uid >= 0) {
+		archive_entry_set_uid(entry, bsdtar->uid);
+		if (!bsdtar->uname)
+			archive_entry_set_uname(entry,
+			    archive_read_disk_uname(bsdtar->diskreader,
+				bsdtar->uid));
+	}
+	if (bsdtar->gid >= 0) {
+		archive_entry_set_gid(entry, bsdtar->gid);
+		if (!bsdtar->gname)
+			archive_entry_set_gname(entry,
+			    archive_read_disk_gname(bsdtar->diskreader,
+				bsdtar->gid));
+	}
+	if (bsdtar->uname)
+		archive_entry_set_uname(entry, bsdtar->uname);
+	if (bsdtar->gname)
+		archive_entry_set_gname(entry, bsdtar->gname);
+}
+
 static int
 append_archive(struct bsdtar *bsdtar, struct archive *a, struct archive *ina)
 {
@@ -723,13 +726,17 @@ append_archive(struct bsdtar *bsdtar, struct archive *a, struct archive *ina)
 		if ((bsdtar->flags & OPTFLAG_INTERACTIVE) &&
 		    !yes("copy '%s'", archive_entry_pathname(in_entry)))
 			continue;
+		if (edit_pathname(bsdtar, in_entry))
+			continue;
+		edit_owner(bsdtar, in_entry);
 		edit_mtime(bsdtar, in_entry);
 		if (bsdtar->verbose > 1) {
-			safe_fprintf(stderr, "a ");
-			list_item_verbose(bsdtar, stderr, in_entry);
-		} else if (bsdtar->verbose > 0)
-			safe_fprintf(stderr, "a %s",
-			    archive_entry_pathname(in_entry));
+			fputs("a ", stderr);
+			list_item_verbose(bsdtar, stderr, in_entry, bsdtar->verbose > 2);
+		} else if (bsdtar->verbose > 0) {
+			fputs("a ", stderr);
+			safe_fputs(archive_entry_pathname(in_entry), stderr);
+		}
 		if (need_report())
 			report_write(bsdtar, a, in_entry, 0);
 
@@ -833,6 +840,12 @@ copy_file_data_block(struct bsdtar *bsdtar, struct archive *a,
 		    archive_error_string(in_a));
 		return (-1);
 	}
+	if (r == ARCHIVE_WARN) {
+		lafe_warnc(archive_errno(in_a), "%s: %s",
+		    archive_entry_pathname(entry),
+		    archive_error_string(in_a));
+		bsdtar->return_value = 1;
+	}
 	return (0);
 }
 
@@ -905,7 +918,6 @@ write_hierarchy(struct bsdtar *bsdtar, struct archive *a, const char *path)
 		bsdtar->return_value = 1;
 		return;
 	}
-	bsdtar->first_fs = -1;
 
 	for (;;) {
 		archive_entry_free(entry);
@@ -925,24 +937,7 @@ write_hierarchy(struct bsdtar *bsdtar, struct archive *a, const char *path)
 				continue;
 		}
 
-		if (bsdtar->uid >= 0) {
-			archive_entry_set_uid(entry, bsdtar->uid);
-			if (!bsdtar->uname)
-				archive_entry_set_uname(entry,
-				    archive_read_disk_uname(bsdtar->diskreader,
-					bsdtar->uid));
-		}
-		if (bsdtar->gid >= 0) {
-			archive_entry_set_gid(entry, bsdtar->gid);
-			if (!bsdtar->gname)
-				archive_entry_set_gname(entry,
-				    archive_read_disk_gname(bsdtar->diskreader,
-					bsdtar->gid));
-		}
-		if (bsdtar->uname)
-			archive_entry_set_uname(entry, bsdtar->uname);
-		if (bsdtar->gname)
-			archive_entry_set_gname(entry, bsdtar->gname);
+		edit_owner(bsdtar, entry);
 
 		if (bsdtar->file_mode) {
 			mode_t m = archive_entry_mode(entry);
@@ -962,12 +957,12 @@ write_hierarchy(struct bsdtar *bsdtar, struct archive *a, const char *path)
 
 		/* Display entry as we process it. */
 		if (bsdtar->verbose > 1) {
-			safe_fprintf(stderr, "a ");
-			list_item_verbose(bsdtar, stderr, entry);
+			fputs("a ", stderr);
+			list_item_verbose(bsdtar, stderr, entry, bsdtar->verbose > 2);
 		} else if (bsdtar->verbose > 0) {
-		/* This format is required by SUSv2. */
-			safe_fprintf(stderr, "a %s",
-			    archive_entry_pathname(entry));
+			/* This format is required by SUSv2. */
+			fputs("a ", stderr);
+			safe_fputs(archive_entry_pathname(entry), stderr);
 		}
 
 		/* Non-regular files get archived with zero size. */
@@ -1015,8 +1010,8 @@ write_entry(struct bsdtar *bsdtar, struct archive *a,
 	e = archive_write_header(a, entry);
 	if (e != ARCHIVE_OK) {
 		if (bsdtar->verbose > 1) {
-			safe_fprintf(stderr, "a ");
-			list_item_verbose(bsdtar, stderr, entry);
+			fputs("a ", stderr);
+			list_item_verbose(bsdtar, stderr, entry, bsdtar->verbose > 2);
 			lafe_warnc(0, ": %s", archive_error_string(a));
 		} else {
 			lafe_warnc(0, "%s: %s",
@@ -1058,12 +1053,11 @@ report_write(struct bsdtar *bsdtar, struct archive *a,
 	else
 		compression = (int)((uncomp - comp) * 100 / uncomp);
 	fprintf(stderr,
-	    " Out: %ju bytes, compression %d%%\n",
+	    " Out: %ju bytes, compression %d%%\nCurrent: ",
 	    (uintmax_t)comp, compression);
-	safe_fprintf(stderr, "Current: %s (%jd",
-	    archive_entry_pathname(entry),
-	    (intmax_t)progress);
-	fprintf(stderr, "/%jd bytes)\n",
+	safe_fputs(archive_entry_pathname(entry), stderr);
+	fprintf(stderr, " (%jd/%jd bytes)\n",
+	    (intmax_t)progress,
 	    (intmax_t)archive_entry_size(entry));
 }
 

@@ -170,8 +170,6 @@ struct archive_write_disk {
 	int64_t			 total_bytes_written;
 	/* Maximum size of file, -1 if unknown. */
 	int64_t			 filesize;
-	/* Dir we were in before this restore; only for deep paths. */
-	int			 restore_pwd;
 	/* Mode we should use for this entry; affected by _PERM and umask. */
 	mode_t			 mode;
 	/* UID/GID to use in restoring this entry. */
@@ -831,7 +829,6 @@ _archive_write_disk_header(struct archive *_a, struct archive_entry *entry)
 	a->fh = INVALID_HANDLE_VALUE;
 	a->fd_offset = 0;
 	a->offset = 0;
-	a->restore_pwd = -1;
 	a->uid = a->user_uid;
 	a->mode = archive_entry_mode(a->entry);
 	if (archive_entry_size_is_set(a->entry))
@@ -2365,15 +2362,15 @@ cleanup_pathname(struct archive_write_disk *a, wchar_t *name)
 		    (p[7] == L'S' || p[7] == L's') &&
 		    (p[8] == L'I' || p[8] == L'i') &&
 		    (p[9] == L'C' || p[9] == L'c') &&
-		    (p[9] == L'A' || p[9] == L'a') &&
-		    (p[9] == L'L' || p[9] == L'l') &&
-		    (p[9] == L'D' || p[9] == L'd') &&
-		    (p[9] == L'R' || p[9] == L'r') &&
-		    (p[9] == L'I' || p[9] == L'i') &&
-		    (p[9] == L'V' || p[9] == L'v') &&
-		    (p[9] == L'E' || p[9] == L'e') &&
-		    (p[10] >= L'0' && p[10] <= L'9') &&
-		    p[11] == L'\0') {
+		    (p[10] == L'A' || p[10] == L'a') &&
+		    (p[11] == L'L' || p[11] == L'l') &&
+		    (p[12] == L'D' || p[12] == L'd') &&
+		    (p[13] == L'R' || p[13] == L'r') &&
+		    (p[14] == L'I' || p[14] == L'i') &&
+		    (p[15] == L'V' || p[15] == L'v') &&
+		    (p[16] == L'E' || p[16] == L'e') &&
+		    (p[17] >= L'0' && p[17] <= L'9') &&
+		    p[18] == L'\0') {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Path is a physical drive name");
 			return (ARCHIVE_FAILED);

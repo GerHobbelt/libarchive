@@ -46,7 +46,9 @@
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
-#ifdef HAVE_ZLIB_H
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
 #include <zlib.h>
 #endif
 
@@ -86,7 +88,7 @@
 #define FD_1_44M_SIZE		(1024 * 1440)
 #define FD_2_88M_SIZE		(1024 * 2880)
 #define MULTI_EXTENT_SIZE	(ARCHIVE_LITERAL_LL(1) << 32)	/* 4Gi bytes. */
-#define MAX_DEPTH		8
+#define MAX_DEPTH		20
 #define RR_CE_SIZE		28		/* SUSP "CE" extension size */
 
 #define FILE_FLAG_EXISTENCE	0x01
@@ -781,7 +783,7 @@ struct iso9660 {
 		int64_t		 total_size;
 		int64_t		 block_offset;
 
-		z_stream	 stream;
+		zng_stream	 stream;
 		int		 stream_valid;
 		int64_t		 remaining;
 		int		 compression_level;
@@ -1239,16 +1241,16 @@ get_num_opt(struct archive_write *a, int *num, int high, int low,
 			    "option ``%s''", high, key);
 			return (ARCHIVE_FATAL);
 		}
-		if (data < low) {
-			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-			    "Invalid value(under %d) for "
-			    "option ``%s''", low, key);
-			return (ARCHIVE_FATAL);
-		}
 		p++;
 	}
 	if (neg)
 		data *= -1;
+	if (data < low) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Invalid value(under %d) for "
+		    "option ``%s''", low, key);
+		return (ARCHIVE_FATAL);
+	}
 	*num = data;
 
 	return (ARCHIVE_OK);
@@ -1532,6 +1534,8 @@ iso9660_write_header(struct archive_write *a, struct archive_entry *entry)
 	struct isofile *file;
 	struct isoent *isoent;
 	int r, ret = ARCHIVE_OK;
+	const char *hardlink = 0;
+
 
 	iso9660->cur_file = NULL;
 	iso9660->bytes_remaining = 0;
@@ -1602,9 +1606,11 @@ iso9660_write_header(struct archive_write *a, struct archive_entry *entry)
 	if (isoent->file != file)
 		return (ARCHIVE_OK);
 
+	hardlink = archive_entry_hardlink(file->entry);
+
 	/* Non regular files contents are unneeded to be saved to
 	 * temporary files. */
-	if (archive_entry_filetype(file->entry) != AE_IFREG)
+	if (archive_entry_filetype(file->entry) != AE_IFREG && !hardlink)
 		return (ret);
 
 	/*
@@ -1612,11 +1618,9 @@ iso9660_write_header(struct archive_write *a, struct archive_entry *entry)
 	 */
 	iso9660->cur_file = file;
 
-	if (archive_entry_nlink(file->entry) > 1) {
-		r = isofile_register_hardlink(a, file);
-		if (r != ARCHIVE_OK)
-			return (ARCHIVE_FATAL);
-	}
+	r = isofile_register_hardlink(a, file);
+	if (r != ARCHIVE_OK)
+		return (ARCHIVE_FATAL);
 
 	/*
 	 * Prepare to save the contents of the file.
@@ -6776,17 +6780,24 @@ isoent_rr_move(struct archive_write *a)
 	/* If "rr_moved" directory is already existing,
 	 * we have to use it. */
 	rr_moved = isoent_find_child(rootent, "rr_moved");
-	if (rr_moved != NULL &&
-	    rr_moved != rootent->children.first) {
-		/*
-		 * It's necessary that rr_move is the first entry
-		 * of the root.
-		 */
-		/* Remove "rr_moved" entry from children chain. */
-		isoent_remove_child(rootent, rr_moved);
+	if (rr_moved != NULL) {
+		if (!rr_moved->dir) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Unable to relocate directories into rr_moved:"
+			    " the existing entry is not a directory");
+			return (ARCHIVE_FATAL);
+		}
+		if (rr_moved != rootent->children.first) {
+			/*
+			 * It's necessary that rr_move is the first entry
+			 * of the root.
+			 */
+			/* Remove "rr_moved" entry from children chain. */
+			isoent_remove_child(rootent, rr_moved);
 
-		/* Add "rr_moved" entry into the head of children chain. */
-		isoent_add_child_head(rootent, rr_moved);
+			/* Add "rr_moved" entry to the head of children chain. */
+			isoent_add_child_head(rootent, rr_moved);
+		}
 	}
 
 	/*
@@ -7421,9 +7432,9 @@ zisofs_init_zstream(struct archive_write *a)
 	iso9660->zisofs.stream.total_in = 0;
 	iso9660->zisofs.stream.total_out = 0;
 	if (iso9660->zisofs.stream_valid)
-		r = deflateReset(&(iso9660->zisofs.stream));
+		r = zng_deflateReset(&(iso9660->zisofs.stream));
 	else {
-		r = deflateInit(&(iso9660->zisofs.stream),
+		r = zng_deflateInit(&(iso9660->zisofs.stream),
 		    iso9660->zisofs.compression_level);
 		iso9660->zisofs.stream_valid = 1;
 	}
@@ -7640,7 +7651,7 @@ zisofs_write_to_temp(struct archive_write *a, const void *buff, size_t s)
 	struct iso9660 *iso9660 = a->format_data;
 	struct isofile *file = iso9660->cur_file;
 	const unsigned char *b;
-	z_stream *zstrm;
+	zng_stream *zstrm;
 	size_t avail, csize;
 	int flush, r;
 
@@ -7706,7 +7717,7 @@ zisofs_write_to_temp(struct archive_write *a, const void *buff, size_t s)
 		 */
 		while (zstrm->avail_in > 0) {
 			csize = zstrm->total_out;
-			r = deflate(zstrm, flush);
+			r = zng_deflate(zstrm, flush);
 			switch (r) {
 			case Z_OK:
 			case Z_STREAM_END:
@@ -7827,7 +7838,7 @@ zisofs_free(struct archive_write *a)
 
 	free(iso9660->zisofs.block_pointers);
 	if (iso9660->zisofs.stream_valid &&
-	    deflateEnd(&(iso9660->zisofs.stream)) != Z_OK) {
+		zng_deflateEnd(&(iso9660->zisofs.stream)) != Z_OK) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 		    "Failed to clean up compressor");
 		ret = ARCHIVE_FATAL;
@@ -7852,7 +7863,7 @@ struct zisofs_extract {
 	size_t		 block_off;
 	uint32_t	 block_avail;
 
-	z_stream	 stream;
+	zng_stream	 stream;
 	int		 stream_valid;
 };
 
@@ -7992,9 +8003,9 @@ zisofs_extract(struct archive_write *a, struct zisofs_extract *zisofs,
 
 		/* Initialize compression library for new block. */
 		if (zisofs->stream_valid)
-			r = inflateReset(&zisofs->stream);
+			r = zng_inflateReset(&zisofs->stream);
 		else
-			r = inflateInit(&zisofs->stream);
+			r = zng_inflateInit(&zisofs->stream);
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Can't initialize zisofs decompression");
@@ -8037,7 +8048,7 @@ zisofs_extract(struct archive_write *a, struct zisofs_extract *zisofs,
 		zisofs->stream.next_out = wb_buffptr(a);
 		zisofs->stream.avail_out = (uInt)wb_remaining(a);
 
-		r = inflate(&zisofs->stream, 0);
+		r = zng_inflate(&zisofs->stream, Z_NO_FLUSH);
 		switch (r) {
 		case Z_OK: /* Decompressor made some progress.*/
 		case Z_STREAM_END: /* Found end of stream. */
@@ -8153,7 +8164,7 @@ zisofs_rewind_boot_file(struct archive_write *a)
 	 */
 	free(rbuff);
 	free(zext.block_pointers);
-	if (zext.stream_valid && inflateEnd(&(zext.stream)) != Z_OK) {
+	if (zext.stream_valid && zng_inflateEnd(&(zext.stream)) != Z_OK) {
         	archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 		    "Failed to clean up compressor");
 		ret = ARCHIVE_FATAL;

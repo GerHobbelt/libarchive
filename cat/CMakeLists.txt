@@ -12,7 +12,7 @@ IF(ENABLE_CAT)
     bsdcat.c
     bsdcat.h
     bsdcat_platform.h
-    cmdline.c
+    cat_cmdline.c
     ../libarchive_fe/lafe_err.c
     ../libarchive_fe/lafe_err.h
     ../libarchive_fe/lafe_platform.h

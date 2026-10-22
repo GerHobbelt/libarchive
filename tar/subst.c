@@ -49,13 +49,29 @@ init_substitution(struct bsdtar *bsdtar)
 	subst->first_rule = subst->last_rule = NULL;
 }
 
+static int
+is_escaped(const char *start, const char *delim)
+{
+	int escaped = 0;
+
+	if (*delim == '\\')
+		return (0);
+
+	while (delim > start && delim[-1] == '\\') {
+		delim--;
+		escaped = !escaped;
+	}
+
+	return (escaped);
+}
+
 void
 add_substitution(struct bsdtar *bsdtar, const char *rule_text)
 {
 	struct subst_rule *rule;
 	struct substitution *subst;
-	const char *end_pattern, *start_subst;
-	char *pattern;
+	const char *end_pattern, *q, *start_subst;
+	char *pattern, *p;
 	int r;
 
 	if ((subst = bsdtar->substitution) == NULL) {
@@ -98,17 +114,29 @@ add_substitution(struct bsdtar *bsdtar, const char *rule_text)
 	free(pattern);
 
 	start_subst = end_pattern + 1;
-	end_pattern = strchr(start_subst, delim);
-	if (end_pattern == NULL)
-		lafe_errc(1, 0, "Invalid replacement string \"%s\": "
-		    "missing closing delimiter '%c' after replacement",
-		    rule_text, delim);
+	do {
+		end_pattern = strchr(end_pattern + 1, delim);
+		if (end_pattern == NULL)
+			lafe_errc(1, 0, "Invalid replacement string \"%s\": "
+			    "missing closing delimiter '%c' after replacement",
+			    rule_text, delim);
+	} while (is_escaped(start_subst, end_pattern));
 
 	rule->result = malloc(end_pattern - start_subst + 1);
 	if (rule->result == NULL)
 		lafe_errc(1, errno, "Out of memory");
-	memcpy(rule->result, start_subst, end_pattern - start_subst);
-	rule->result[end_pattern - start_subst] = '\0';
+	p = rule->result;
+	q = start_subst;
+	while (q < end_pattern) {
+		if (*q == '\\' && delim != '\\')
+			q++;
+		if (q == end_pattern)
+			lafe_errc(1, 0, "Invalid replacement string \"%s\": "
+			    "missing closing delimiter '%c' after replacement",
+			    rule_text, delim);
+		*p++ = *q++;
+	}
+	*p = '\0';
 
 	/* Defaults */
 	rule->global = 0; /* Don't do multiple replacements. */
@@ -182,22 +210,7 @@ realloc_strncat(char **str, const char *append, size_t len)
 static void
 realloc_strcat(char **str, const char *append)
 {
-	char *new_str;
-	size_t old_len;
-
-	if (*str == NULL)
-		old_len = 0;
-	else
-		old_len = strlen(*str);
-
-	new_str = malloc(old_len + strlen(append) + 1);
-	if (new_str == NULL)
-		lafe_errc(1, errno, "Out of memory");
-	if (*str != NULL)
-		memcpy(new_str, *str, old_len);
-	strcpy(new_str + old_len, append);
-	free(*str);
-	*str = new_str;
+	realloc_strncat(str, append, strlen(append));
 }
 
 int
@@ -282,7 +295,7 @@ apply_substitution(struct bsdtar *bsdtar, const char *name, char **result,
 				case '8':
 				case '9':
 					realloc_strncat(result, rule->result + j, i - j - 1);
-					if ((size_t)(c - '0') > (size_t)(rule->re.re_nsub)) {
+					if ((size_t)(c - '0') > rule->re.re_nsub) {
 						free(buffer);
 						free(*result);
 						*result = NULL;

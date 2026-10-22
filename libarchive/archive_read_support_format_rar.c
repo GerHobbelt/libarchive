@@ -31,8 +31,10 @@
 #endif
 #include <time.h>
 #include <limits.h>
-#ifdef HAVE_ZLIB_H
-#include <zlib.h> /* crc32 */
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
+#include <zlib.h> /* for crc32 and adler32 */
 #endif
 
 #include "archive.h"
@@ -89,6 +91,8 @@
 #define FHD_EXTTIME      0x1000
 #define FHD_EXTFLAGS     0x2000
 
+#define RAR_MAX_SYMLINK_SIZE (1024 * 1024)
+
 /* File dictionary sizes */
 #define DICTIONARY_SIZE_64   0x00
 #define DICTIONARY_SIZE_128  0x20
@@ -134,7 +138,7 @@
 #define MAX_SYMBOL_LENGTH 0xF
 #define MAX_SYMBOLS       20
 
-#define SFX_MAX_READAHEAD (1024 * 128)
+#define SFX_MAX_READAHEAD (1024 * 512)
 
 /* Virtual Machine Properties */
 #define VM_MEMORY_SIZE 0x40000
@@ -328,7 +332,6 @@ struct rar
   unsigned int unp_buffer_size;
   unsigned char *unp_buffer;
   unsigned int dictionary_size;
-  char start_new_block;
   char entry_eof;
   unsigned long crc_calculated;
   int found_first_header;
@@ -510,10 +513,10 @@ rar_br_fillup(struct archive_read *a, struct rar_br *br)
             ((uint64_t)br->next_in[1]) << 48 |
             ((uint64_t)br->next_in[2]) << 40 |
             ((uint64_t)br->next_in[3]) << 32 |
-            ((uint32_t)br->next_in[4]) << 24 |
-            ((uint32_t)br->next_in[5]) << 16 |
-            ((uint32_t)br->next_in[6]) << 8 |
-             (uint32_t)br->next_in[7];
+            ((uint64_t)br->next_in[4]) << 24 |
+            ((uint64_t)br->next_in[5]) << 16 |
+            ((uint64_t)br->next_in[6]) << 8 |
+             (uint64_t)br->next_in[7];
         br->next_in += 8;
         br->avail_in -= 8;
         br->cache_avail += 8 * 8;
@@ -529,10 +532,10 @@ rar_br_fillup(struct archive_read *a, struct rar_br *br)
             ((uint64_t)br->next_in[0]) << 48 |
             ((uint64_t)br->next_in[1]) << 40 |
             ((uint64_t)br->next_in[2]) << 32 |
-            ((uint32_t)br->next_in[3]) << 24 |
-            ((uint32_t)br->next_in[4]) << 16 |
-            ((uint32_t)br->next_in[5]) << 8 |
-             (uint32_t)br->next_in[6];
+            ((uint64_t)br->next_in[3]) << 24 |
+            ((uint64_t)br->next_in[4]) << 16 |
+            ((uint64_t)br->next_in[5]) << 8 |
+             (uint64_t)br->next_in[6];
         br->next_in += 7;
         br->avail_in -= 7;
         br->cache_avail += 7 * 8;
@@ -547,10 +550,10 @@ rar_br_fillup(struct archive_read *a, struct rar_br *br)
            (br->cache_buffer << 48) |
             ((uint64_t)br->next_in[0]) << 40 |
             ((uint64_t)br->next_in[1]) << 32 |
-            ((uint32_t)br->next_in[2]) << 24 |
-            ((uint32_t)br->next_in[3]) << 16 |
-            ((uint32_t)br->next_in[4]) << 8 |
-             (uint32_t)br->next_in[5];
+            ((uint64_t)br->next_in[2]) << 24 |
+            ((uint64_t)br->next_in[3]) << 16 |
+            ((uint64_t)br->next_in[4]) << 8 |
+             (uint64_t)br->next_in[5];
         br->next_in += 6;
         br->avail_in -= 6;
         br->cache_avail += 6 * 8;
@@ -838,7 +841,7 @@ skip_sfx(struct archive_read *a)
 
   total = 0;
   window = 4096;
-  while (total + window <= (1024 * 128)) {
+  while (total + window <= SFX_MAX_READAHEAD) {
     h = __archive_read_ahead(a, window, &bytes);
     if (h == NULL) {
       /* Remaining bytes are less than window. */
@@ -1512,12 +1515,14 @@ read_header(struct archive_read *a, struct archive_entry *entry,
    * consumed at the end.
    */
   if (head_type == NEWSUB_HEAD) {
-    if (rar->packed_size > INT64_MAX - header_size) {
+    int64_t skip;
+    if (archive_ckd_add_i64(&skip, rar->packed_size, header_size) ||
+        skip < 7) {
       archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
                         "Invalid RAR file: Overlarge extended header");
       return (ARCHIVE_FATAL);
     }
-    if (__archive_read_consume(a, header_size + rar->packed_size - 7) < 0) {
+    if (__archive_read_consume(a, skip - 7) < 0) {
       archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
                         "Invalid RAR file: Cannot read extended header data");
       return (ARCHIVE_FATAL);
@@ -1868,7 +1873,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
 static time_t
 get_time(int ttime)
 {
-  struct tm tm = { };
+  struct tm tm = { 0 };
   tm.tm_sec = 2 * (ttime & 0x1f);
   tm.tm_min = (ttime >> 5) & 0x3f;
   tm.tm_hour = (ttime >> 11) & 0x1f;
@@ -1968,7 +1973,7 @@ read_symlink_stored(struct archive_read *a, struct archive_entry *entry,
   const char *p;
   int ret = (ARCHIVE_OK);
 
-  if ((uintmax_t)rar->packed_size > SIZE_MAX)
+  if (rar->packed_size > RAR_MAX_SYMLINK_SIZE)
   {
     archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
                       "Unable to read link");
@@ -2995,7 +3000,6 @@ expand(struct archive_read *a, int64_t *end)
 
       if(newfile)
       {
-        rar->start_new_block = 1;
         if (!rar_br_read_ahead(a, br, 1))
           goto truncated_data;
         rar->start_new_table = rar_br_bits(br, 1);
@@ -3338,7 +3342,7 @@ parse_filter(struct archive_read *a, const uint8_t *bytes, uint16_t length, uint
   {
     uint8_t mask = (uint8_t)membr_bits(&br, 7);
     for (i = 0; i < 7; i++)
-      if ((mask & (1 << i)))
+      if ((mask & (1U << i)))
         registers[i] = membr_next_rarvm_number(&br);
   }
 
@@ -3479,8 +3483,11 @@ run_filters(struct archive_read *a)
   if (tend < 0)
     return 0;
   end = (size_t)tend;
-  if (end != start + filter->blocklength)
+  if (end != start + filter->blocklength) {
+    archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
+      "Bad RAR file data: filter block was not fully decompressed");
     return 0;
+  }
 
   if (!filters->vm)
   {

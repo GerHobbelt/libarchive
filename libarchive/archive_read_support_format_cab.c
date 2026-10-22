@@ -37,8 +37,10 @@
 #ifdef HAVE_STRING_H
 #include <string.h>
 #endif
-#ifdef HAVE_ZLIB_H
-#include <zlib.h>
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
+#include <zlib.h> /* for crc32 and adler32 */
 #endif
 
 #include "archive.h"
@@ -286,7 +288,7 @@ struct lzx_stream {
 #define MAX_UNCOMPRESS_SIZE	0x8000
 #define MAX_FILE_SIZE		(UINT16_MAX * MAX_UNCOMPRESS_SIZE)
 #define MAX_E8_TRANSLATION	(0x8000 * MAX_UNCOMPRESS_SIZE)
-#define SFX_MAX_READAHEAD	(1024 * 128)
+#define SFX_MAX_READAHEAD	(1024 * 512)
 
 static const char * const compression_name[] = {
 	"NONE",
@@ -401,7 +403,7 @@ struct cab {
 	char			 format_name[64];
 
 #ifdef HAVE_ZLIB_H
-	z_stream		 stream;
+	zng_stream		 stream;
 	char			 stream_valid;
 #endif
 	struct lzx_stream	 xstrm;
@@ -526,11 +528,16 @@ archive_read_format_cab_bid(struct archive_read *a, int best_bid)
 	if (best_bid > 64)
 		return (-1);
 
-	if ((h = __archive_read_ahead(a, 8, NULL)) == NULL)
+	if ((h = __archive_read_ahead(a, 16, NULL)) == NULL)
 		return (-1);
 
-	if (memcmp(h, "MSCF\0\0\0\0", 8) == 0)
-		return (64);
+	if (memcmp(h, "MSCF", 4) == 0) {
+		if (memcmp(h + 4, "\0\0\0\0", 4) == 0)
+			return (64);
+		/* Some archives do not have all reserved bits set to zero. */
+		if (memcmp(h + 12, "\0\0\0\0", 4) == 0)
+			return (32);
+	}
 
 	/*
 	 * Attempt to handle self-extracting archives
@@ -1533,6 +1540,7 @@ cab_read_ahead_cfdata_none(struct archive_read *a, ssize_t *avail)
 static const void *
 cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 {
+	static const ssize_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 	struct cab *cab = a->format->data;
 	struct cfdata *cfdata;
 	const void *d;
@@ -1569,9 +1577,9 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 		cab->stream.avail_out = 0;
 		cab->stream.total_out = 0;
 		if (cab->stream_valid)
-			r = inflateReset(&cab->stream);
+			r = zng_inflateReset(&cab->stream);
 		else
-			r = inflateInit2(&cab->stream,
+			r = zng_inflateInit2(&cab->stream,
 			    -15 /* Don't check for zlib header */);
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
@@ -1609,6 +1617,8 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 		}
 		if (bytes_avail > cfdata->compressed_bytes_remaining)
 			bytes_avail = cfdata->compressed_bytes_remaining;
+		if (bytes_avail > max_decode_size)
+			bytes_avail = max_decode_size;
 		/*
 		 * A bug in zlib.h: stream.next_in should be marked 'const'
 		 * but isn't (the library never alters data through the
@@ -1653,7 +1663,7 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 			mszip = 0;
 		}
 
-		r = inflate(&cab->stream, 0);
+		r = zng_inflate(&cab->stream, Z_NO_FLUSH);
 		switch (r) {
 		case Z_OK:
 			break;
@@ -1710,10 +1720,10 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
 	 */
 	if (cab->entry_cffolder->cfdata_index <
 	    cab->entry_cffolder->cfdata_count) {
-		r = inflateReset(&cab->stream);
+		r = zng_inflateReset(&cab->stream);
 		if (r != Z_OK)
 			goto zlibfailed;
-		r = inflateSetDictionary(&cab->stream,
+		r = zng_inflateSetDictionary(&cab->stream,
 		    cab->uncompressed_buffer, cfdata->uncompressed_size);
 		if (r != Z_OK)
 			goto zlibfailed;
@@ -2156,7 +2166,7 @@ archive_read_format_cab_cleanup(struct archive_read *a)
 	}
 #ifdef HAVE_ZLIB_H
 	if (cab->stream_valid)
-		inflateEnd(&cab->stream);
+		zng_inflateEnd(&cab->stream);
 #endif
 	lzx_decode_free(&cab->xstrm);
 	archive_wstring_free(&cab->ws);
@@ -2772,7 +2782,7 @@ lzx_read_blocks(struct lzx_stream *strm, int last)
 			/*
 			 * Read Pre-tree for first 256 elements of main tree.
 			 */
-			if (lzx_read_pre_tree(strm) < 0) {
+			if (lzx_read_pre_tree(strm) == ARCHIVE_EOF) {
 				ds->state = ST_RD_PRE_MAIN_TREE_256;
 				if (last)
 					goto failed;
@@ -2800,7 +2810,7 @@ lzx_read_blocks(struct lzx_stream *strm, int last)
 			/*
 			 * Read Pre-tree for remaining elements of main tree.
 			 */
-			if (lzx_read_pre_tree(strm) < 0) {
+			if (lzx_read_pre_tree(strm) == ARCHIVE_EOF) {
 				ds->state = ST_RD_PRE_MAIN_TREE_REM;
 				if (last)
 					goto failed;
@@ -2830,7 +2840,7 @@ lzx_read_blocks(struct lzx_stream *strm, int last)
 			/*
 			 * Read Pre-tree for remaining elements of main tree.
 			 */
-			if (lzx_read_pre_tree(strm) < 0) {
+			if (lzx_read_pre_tree(strm) == ARCHIVE_EOF) {
 				ds->state = ST_RD_PRE_LENGTH_TREE;
 				if (last)
 					goto failed;

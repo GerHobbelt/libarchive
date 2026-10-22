@@ -142,13 +142,13 @@ file_skip(struct archive *a, void *client_data, int64_t request)
 	struct read_fd_data *mine = (struct read_fd_data *)client_data;
 	la_seek_t skip = (la_seek_t)request;
 	int64_t old_offset, new_offset;
-	int skip_bits = sizeof(skip) * 8 - 1;  /* off_t is a signed type. */
 
 	if (!mine->use_lseek)
 		return (0);
 
 	/* Reduce a request that would overflow the 'skip' variable. */
 	if (sizeof(request) > sizeof(skip)) {
+		int skip_bits = sizeof(skip) * 8 - 1;  /* off_t is a signed type. */
 		const int64_t max_skip =
 		    (((int64_t)1 << (skip_bits - 1)) - 1) * 2 + 1;
 		if (request > max_skip)
@@ -215,16 +215,10 @@ file_seek(struct archive *a, void *client_data, int64_t request, int whence)
 		return r;
 
 err:
-	if (errno == ESPIPE) {
-		archive_set_error(a, errno,
-		    "A file descriptor(%d) is not seekable(PIPE)", mine->fd);
-		return (ARCHIVE_FAILED);
-	} else {
-		/* If the input is corrupted or truncated, fail. */
-		archive_set_error(a, errno,
-		    "Error seeking in a file descriptor(%d)", mine->fd);
-		return (ARCHIVE_FATAL);
-	}
+	/* If the input is corrupted or truncated, fail. */
+	archive_set_error(a, errno,
+	    "Error seeking in a file descriptor(%d)", mine->fd);
+	return (ARCHIVE_FAILED);
 }
 
 static int

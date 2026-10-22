@@ -9,6 +9,7 @@
 #include "bsdunzip_platform.h"
 
 #include "la_queue.h"
+#include "lafe_explicit_bzero.h"
 #include "lafe_fnmatch.h"
 #include "lafe_getline.h"
 #ifdef HAVE_SYS_STAT_H
@@ -285,7 +286,7 @@ pathcat(const char *prefix, const char *path)
  */
 struct pattern {
 	STAILQ_ENTRY(pattern) link;
-	char pattern[];
+	char pattern[0];
 };
 
 STAILQ_HEAD(pattern_list, pattern);
@@ -402,32 +403,32 @@ make_parent(char *path)
 {
 	struct stat sb;
 	char *sep;
+	size_t len;
 
+	/* Retrieve string length of parent directory. */
 	sep = strrchr(path, '/');
 	if (sep == NULL || sep == path)
 		return;
-	*sep = '\0';
-	if (lstat(path, &sb) == 0) {
-		if (S_ISDIR(sb.st_mode)) {
-			*sep = '/';
-			return;
-		}
-		system_unlink(path);
-	}
-	make_parent(path);
-	system_mkdir(path, 0755);
-	*sep = '/';
+	len = sep - path;
 
-#if 0
-	for (sep = path; (sep = strchr(sep, '/')) != NULL; sep++) {
-		/* root in case of absolute d_arg */
-		if (sep == path)
-			continue;
+	/* Find deepest already existing directory. */
+	do {
 		*sep = '\0';
-		make_dir(path, 0755);
-		*sep = '/';
+		if (lstat(path, &sb) == 0) {
+			if (S_ISDIR(sb.st_mode)) {
+				*sep = '/';
+				break;
+			}
+			system_unlink(path);
+		}
+		sep = strrchr(path, '/');
+	} while (sep != NULL && sep != path);
+
+	/* Create missing directories and restore path. */
+	while (strlen(path) <= len) {
+		system_mkdir(path, 0755);
+		path[strlen(path)] = '/';
 	}
-#endif
 }
 
 /*
@@ -776,11 +777,31 @@ static int
 pathname_is_insecure(const char* pathname)
 {
 	size_t len = strlen(pathname);
-	return (pathname[0] == '/' ||
+#if defined(_WIN32) && !defined(__CYGWIN__)
+	const char *p;
+#endif
+
+	if (pathname[0] == '/' ||
 	    strcmp(pathname, "..") == 0 ||
 	    strncmp(pathname, "../", 3) == 0 ||
 	    strstr(pathname, "/../") != NULL ||
-	    (len >= 3 && strcmp(pathname + len - 3, "/..") == 0));
+	    (len >= 3 && strcmp(pathname + len - 3, "/..") == 0))
+		return 1;
+
+#if defined(_WIN32) && !defined(__CYGWIN__)
+	if (pathname[0] == '\\' ||
+	    (isalpha((unsigned char)pathname[0]) && pathname[1] == ':'))
+		return 1;
+
+	/* Windows treats both slash characters as path separators. */
+	for (p = pathname; *p != '\0'; ++p) {
+		if (p[0] == '.' && p[1] == '.' &&
+		    (p[2] == '\0' || p[2] == '/' || p[2] == '\\') &&
+		    (p == pathname || p[-1] == '/' || p[-1] == '\\'))
+			return 1;
+	}
+#endif
+	return 0;
 }
 
 /*
@@ -1119,10 +1140,11 @@ unzip(const char *fn)
 		}
 	}
 
-	ac(archive_read_free(a));
+	ac(archive_read_close(a));
+	archive_read_free(a);
 
 	if (passphrase_buf != NULL) {
-		memset(passphrase_buf, 0, PPBUFF_SIZE);
+		explicit_bzero(passphrase_buf, PPBUFF_SIZE);
 		free(passphrase_buf);
 	}
 

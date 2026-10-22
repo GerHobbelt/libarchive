@@ -134,6 +134,9 @@
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#endif
 
 /* TODO: Support Mac OS 'quarantine' feature.  This is really just a
  * standard tag to mark files that have been downloaded as "tainted".
@@ -306,7 +309,7 @@ struct archive_write_disk {
 	size_t			 block_remaining_bytes;
 	size_t			 file_remaining_bytes;
 #ifdef HAVE_ZLIB_H
-	z_stream		 stream;
+	zng_stream		 stream;
 	int			 stream_valid;
 	int			 decmpfs_compression_level;
 #endif
@@ -454,8 +457,6 @@ la_opendirat(int fd, const char *path) {
 	    | O_PATH
 #elif defined(O_SEARCH)
 	    | O_SEARCH
-#elif defined(__FreeBSD__) && defined(O_EXEC)
-	    | O_EXEC
 #else
 	    | O_RDONLY
 #endif
@@ -717,7 +718,7 @@ _archive_write_disk_header(struct archive *_a, struct archive_entry *entry)
 			const void *attr_value;
 			size_t attr_size;
 			int i = archive_entry_xattr_reset(a->entry);
-			while (i--) {
+			while (i-- > 0) {
 				archive_entry_xattr_next(a->entry, &attr_name,
 				    &attr_value, &attr_size);
 				if (attr_name != NULL && attr_value != NULL &&
@@ -1241,9 +1242,9 @@ hfs_reset_compressor(struct archive_write_disk *a)
 	int ret;
 
 	if (a->stream_valid)
-		ret = deflateReset(&a->stream);
+		ret = zng_deflateReset(&a->stream);
 	else
-		ret = deflateInit(&a->stream, a->decmpfs_compression_level);
+		ret = zng_deflateInit(&a->stream, a->decmpfs_compression_level);
 
 	if (ret != Z_OK) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
@@ -1333,7 +1334,7 @@ hfs_drive_compressor(struct archive_write_disk *a, const char *buff,
 		size_t block_size;
 
 		block_size = COMPRESSED_W_SIZE + RSRC_F_SIZE +
-		    + compressBound(MAX_DECMPFS_BLOCK_SIZE);
+		    +zng_compressBound(MAX_DECMPFS_BLOCK_SIZE);
 		a->compressed_buffer = malloc(block_size);
 		if (a->compressed_buffer == NULL) {
 			archive_set_error(&a->archive, ENOMEM,
@@ -1351,7 +1352,7 @@ hfs_drive_compressor(struct archive_write_disk *a, const char *buff,
 	a->stream.next_out = buffer_compressed;
 	a->stream.avail_out = a->compressed_buffer_remaining;
 	do {
-		ret = deflate(&a->stream, Z_FINISH);
+		ret = zng_deflate(&a->stream, Z_FINISH);
 		switch (ret) {
 		case Z_OK:
 		case Z_STREAM_END:
@@ -1581,7 +1582,7 @@ hfs_write_decmpfs_block(struct archive_write_disk *a, const char *buff,
 		memcpy(a->uncompressed_buffer +
 		    MAX_DECMPFS_BLOCK_SIZE - a->block_remaining_bytes,
 		    buff, bytes_to_write);
-		buffer_to_write = a->uncompressed_buffer;
+		buffer_to_write = (const char *)a->uncompressed_buffer;
 	}
 	a->block_remaining_bytes -= bytes_to_write;
 	a->file_remaining_bytes -= bytes_to_write;
@@ -2690,7 +2691,7 @@ _archive_write_disk_free(struct archive *_a)
 #if defined(__APPLE__) && defined(UF_COMPRESSED) && defined(HAVE_SYS_XATTR_H)\
 	&& defined(HAVE_ZLIB_H)
 	if (a->stream_valid) {
-		switch (deflateEnd(&a->stream)) {
+		switch (zng_deflateEnd(&a->stream)) {
 		case Z_OK:
 			break;
 		default:
@@ -3564,7 +3565,24 @@ set_time(int fd, int mode, const char *name,
 	ts[1].tv_nsec = mtime_nsec;
 	if (fd >= 0)
 		return futimens(fd, ts);
-	return utimensat(AT_FDCWD, name, ts, AT_SYMLINK_NOFOLLOW);
+
+	int ret = utimensat(AT_FDCWD, name, ts, AT_SYMLINK_NOFOLLOW);
+#ifdef HAVE_LUTIMES
+	if (ret && errno == ENOENT) {
+		// utimensat doesn't seem to work on broken symlinks, try with lutimes
+
+		struct timeval times[2];
+
+		times[0].tv_sec = atime;
+		times[0].tv_usec = atime_nsec / 1000;
+		times[1].tv_sec = mtime;
+		times[1].tv_usec = mtime_nsec / 1000;
+
+		return (lutimes(name, times));
+	}
+#endif
+
+	return ret;
 
 #elif HAVE_UTIMES
 	/*
@@ -4530,7 +4548,7 @@ set_xattrs(struct archive_write_disk *a)
 
 	archive_string_init(&errlist);
 
-	while (i--) {
+	while (i-- > 0) {
 		const char *name;
 		const void *value;
 		size_t size;
@@ -4616,11 +4634,11 @@ set_xattrs(struct archive_write_disk *a)
 	struct archive_string errlist;
 	int ret = ARCHIVE_OK;
 	int i = archive_entry_xattr_reset(entry);
-	short fail = 0;
+	int fail = 0;
 
 	archive_string_init(&errlist);
 
-	while (i--) {
+	while (i-- > 0) {
 		const char *name;
 		const void *value;
 		size_t size;
@@ -4673,7 +4691,7 @@ set_xattrs(struct archive_write_disk *a)
 				e = extattr_set_fd(a->fd, namespace, name,
 				    value, size);
 				if (e == 0 && errno == 0) {
-					e = size;
+					e = (int)size;
 				}
 			} else {
 				e = extattr_set_link(

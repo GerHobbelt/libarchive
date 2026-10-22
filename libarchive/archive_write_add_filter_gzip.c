@@ -35,8 +35,10 @@
 #include <string.h>
 #endif
 #include <time.h>
-#ifdef HAVE_ZLIB_H
-#include <zlib.h>
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
+#include <zlib.h> /* for crc32 and adler32 */
 #endif
 
 #include "archive.h"
@@ -61,7 +63,7 @@ struct gzip {
 	int		 timestamp;
 	char	*original_filename;
 #ifdef HAVE_ZLIB_H
-	z_stream	 stream;
+	zng_stream	 stream;
 	uint64_t	 total_in;
 	unsigned char	*compressed;
 	size_t		 compressed_buffer_size;
@@ -263,8 +265,8 @@ archive_compressor_gzip_open(struct archive_write_filter *f)
 		}
 		if (ofn_length < ofn_max_length) {
 			gzip->compressed[3] |= 0x8;
-			strcpy((char*)gzip->compressed + 10,
-			       gzip->original_filename);
+			memcpy(gzip->compressed + 10,
+			       gzip->original_filename, ofn_length + 1);
 			gzip->stream.next_out += ofn_length + 1;
 			gzip->stream.avail_out -= ofn_length + 1;
 		} else {
@@ -275,7 +277,7 @@ archive_compressor_gzip_open(struct archive_write_filter *f)
 	}
 
 	/* Initialize compression library. */
-	init_success = deflateInit2(&(gzip->stream),
+	init_success = zng_deflateInit2(&(gzip->stream),
 	    gzip->compression_level,
 	    Z_DEFLATED,
 	    -15 /* < 0 to suppress zlib header */,
@@ -359,7 +361,7 @@ archive_compressor_gzip_close(struct archive_write_filter *f)
 		ret = __archive_write_filter(f->next_filter, trailer, 8);
 	}
 
-	switch (deflateEnd(&(gzip->stream))) {
+	switch (zng_deflateEnd(&(gzip->stream))) {
 	case Z_OK:
 		break;
 	default:
@@ -399,7 +401,7 @@ drive_compressor(struct archive_write_filter *f,
 		if (!finishing && gzip->stream.avail_in == 0)
 			return (ARCHIVE_OK);
 
-		ret = deflate(&(gzip->stream),
+		ret = zng_deflate(&(gzip->stream),
 		    finishing ? Z_FINISH : Z_NO_FLUSH );
 
 		switch (ret) {

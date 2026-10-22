@@ -49,8 +49,10 @@
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
-#ifdef HAVE_ZLIB_H
-#include <zlib.h>
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
+#include <zlib.h> /* for crc32 and adler32 */
 #endif
 #ifdef HAVE_LZMA_H
 #include <lzma.h>
@@ -200,7 +202,7 @@ struct zip {
 		} lzma;
 #endif
 #ifdef HAVE_ZLIB_H
-		z_stream deflate;
+		zng_stream deflate;
 #endif
 #ifdef HAVE_BZLIB_H
 		bz_stream bzip2;
@@ -435,8 +437,11 @@ archive_write_zip_options(struct archive_write *a, const char *key,
 		char *endptr;
 		unsigned long v;
 
-		if (val == NULL)
+		if (val == NULL) {
+			archive_set_error(&(a->archive), ARCHIVE_ERRNO_MISC,
+			    "Option 'threads' requires an argument");
 			return (ARCHIVE_FAILED);
+		}
 		errno = 0;
 		v = strtoul(val, &endptr, 10);
 		if (errno != 0 || *endptr != '\0' || v > SHRT_MAX) {
@@ -1362,7 +1367,7 @@ archive_write_zip_header(struct archive_write *a, struct archive_entry *entry)
 		zip->stream.deflate.opaque = Z_NULL;
 		zip->stream.deflate.next_out = zip->buf;
 		zip->stream.deflate.avail_out = (uInt)zip->len_buf;
-		if (deflateInit2(&zip->stream.deflate, zip->compression_level,
+		if (zng_deflateInit2(&zip->stream.deflate, zip->compression_level,
 		    Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
 			archive_set_error(&a->archive, ENOMEM,
 			    "Can't init deflate compressor");
@@ -1584,7 +1589,7 @@ archive_write_zip_data(struct archive_write *a, const void *buff, size_t s)
 		zip->stream.deflate.next_in = (unsigned char*)(uintptr_t)buff;
 		zip->stream.deflate.avail_in = (uInt)s;
 		do {
-			ret = deflate(&zip->stream.deflate, Z_NO_FLUSH);
+			ret = zng_deflate(&zip->stream.deflate, Z_NO_FLUSH);
 			if (ret == Z_STREAM_ERROR)
 				return (ARCHIVE_FATAL);
 			if (zip->stream.deflate.avail_out == 0) {
@@ -1859,7 +1864,7 @@ archive_write_zip_finish_entry(struct archive_write *a)
 		for (;;) {
 			size_t remainder;
 
-			ret = deflate(&zip->stream.deflate, Z_FINISH);
+			ret = zng_deflate(&zip->stream.deflate, Z_FINISH);
 			if (ret == Z_STREAM_ERROR)
 				return (ARCHIVE_FATAL);
 			remainder = zip->len_buf - zip->stream.deflate.avail_out;
@@ -1883,7 +1888,7 @@ archive_write_zip_finish_entry(struct archive_write *a)
 			ret = __archive_write_output(a, zip->buf, remainder);
 			if (ret != ARCHIVE_OK)
 			{
-				deflateEnd(&zip->stream.deflate);
+				zng_deflateEnd(&zip->stream.deflate);
 				return (ret);
 			}
 			zip->entry_compressed_written += remainder;
@@ -1893,7 +1898,7 @@ archive_write_zip_finish_entry(struct archive_write *a)
 				break;
 			zip->stream.deflate.avail_out = (uInt)zip->len_buf;
 		}
-		deflateEnd(&zip->stream.deflate);
+		zng_deflateEnd(&zip->stream.deflate);
 		break;
 #endif
 #ifdef HAVE_BZLIB_H

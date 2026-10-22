@@ -11,6 +11,7 @@
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <share.h>
 
 #ifndef PRId64

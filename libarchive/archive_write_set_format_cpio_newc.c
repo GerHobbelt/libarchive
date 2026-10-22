@@ -61,7 +61,7 @@ static int	write_header(struct archive_write *, struct archive_entry *);
 
 struct cpio {
 	uint64_t	  entry_bytes_remaining;
-	int		  padding;
+	size_t		  padding;
 
 	int64_t		  ino_next;
 
@@ -110,7 +110,7 @@ struct cpio {
 #define	c_header_size 110
 
 /* Logic trick: difference between 'n' and next multiple of 4 */
-#define PAD4(n)	(3 & (1 + ~(n)))
+#define PAD4(n)	(3U & (1U + ~(n)))
 
 /*
  * Set output format to 'cpio' format.
@@ -422,7 +422,7 @@ write_header(struct archive_write *a, struct archive_entry *entry)
 	}
 
 	cpio->entry_bytes_remaining = archive_entry_size(entry);
-	cpio->padding = (int)PAD4(cpio->entry_bytes_remaining);
+	cpio->padding = (size_t)PAD4(cpio->entry_bytes_remaining);
 
 	/* Write the symlink now. */
 	if (p != NULL  &&  *p != '\0') {

@@ -51,8 +51,10 @@
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
-#ifdef HAVE_ZLIB_H
-#include <zlib.h>
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
+#include <zlib.h> /* for crc32 and adler32 */
 #endif
 #ifdef HAVE_BZLIB_H
 #include <bzlib.h>
@@ -77,7 +79,9 @@
 #include "archive_time_private.h"
 #include "archive_ppmd8_private.h"
 
-
+#ifdef HAVE_LIBNATSPEC
+#include <natspec.h>
+#endif
 
 /* length of local file header, not including filename and extra */
 #define ZIP_LOCHDR_LEN		30U
@@ -97,6 +101,12 @@ struct zip_entry {
 	time_t			mtime;
 	time_t			atime;
 	time_t			ctime;
+	/* File creation time, from an NTFS extra field only */
+	time_t			btime;
+	/* Nanosecond precision, from an NTFS extra field only */
+	uint32_t		mtime_ns;
+	uint32_t		atime_ns;
+	uint32_t		btime_ns;
 	uint32_t		crc32;
 	uint16_t		mode;
 	uint16_t		zip_flags; /* From GP Flags Field */
@@ -136,6 +146,12 @@ struct trad_enc_ctx {
 /* Bits used in flags. */
 #define LA_USED_ZIP64	(1 << 0)
 #define LA_FROM_CENTRAL_DIRECTORY (1 << 1)
+#define LA_MTIME_FROM_EXTRA (1 << 2)
+#define LA_ATIME_FROM_EXTRA (1 << 3)
+#define LA_CTIME_FROM_EXTRA (1 << 4)
+#define LA_NTFS_MTIME (1 << 5)
+#define LA_NTFS_ATIME (1 << 6)
+#define LA_NTFS_BTIME (1 << 7)
 
 /*
  * See "WinZip - AES Encryption Information"
@@ -185,7 +201,7 @@ struct zip {
 	size_t 			uncompressed_buffer_size;
 
 #ifdef HAVE_ZLIB_H
-	z_stream		stream;
+	zng_stream		stream;
 	char			stream_valid;
 #endif
 
@@ -231,7 +247,6 @@ struct zip {
 	unsigned char 		*decrypted_ptr;
 	size_t 			decrypted_buffer_size;
 	size_t 			decrypted_bytes_remaining;
-	size_t 			decrypted_unconsumed_bytes;
 
 	/* Traditional PKWARE decryption. */
 	struct trad_enc_ctx	tctx;
@@ -651,6 +666,23 @@ compression_name(const int compression)
 }
 
 /*
+ * Interpret a raw 32-bit Unix timestamp, preferring the signed
+ * (pre-1970-capable) reading unless it would land before 1960, in
+ * which case the unsigned (post-2038-capable) reading is used instead.
+ * On a platform where time_t is no wider than 32 bits, that unsigned
+ * reading could never be represented anyway, so it's always skipped.
+ * See https://github.com/libarchive/libarchive/issues/3550.
+ */
+static time_t
+to_time_t(uint32_t raw)
+{
+	const int32_t year_1960_offset = (10 * 365 + 3) * 24 * 60 * 60;
+	const int32_t t = (int32_t)raw;
+	return (sizeof(time_t) <= sizeof(raw) || t >= -year_1960_offset)
+	    ? (time_t)t : (time_t)raw;
+}
+
+/*
  * The extra data is stored as a list of
  *	id1+size1+data1 + id2+size2+data2 ...
  *  triplets.  id and size are 2 bytes each.
@@ -759,12 +791,96 @@ process_extra(struct archive_read *a, struct archive_entry *entry,
 			 * on which file starts, but we don't handle
 			 * multi-volume Zip files. */
 			break;
+		case 0x000a:
+		{
+			/* NTFS Extra Field: 4 reserved bytes, then one or
+			 * more Tag(2)/Size(2)/Data(Size) attribute blocks.
+			 * Only Tag 1 (size 24: Mtime, Atime, Ctime, each an
+			 * 8-byte Windows FILETIME) is defined; skip any
+			 * other tag, per spec. Unlike every other ZIP
+			 * timestamp source, FILETIME has no negative/pre-
+			 * epoch ambiguity (it's unsigned ticks since
+			 * 1601), and it's 100ns-precision rather than
+			 * 1-second, so it also supplies mtime_ns/atime_ns.
+			 * "Ctime" here is Windows creation time, not POSIX
+			 * ctime, so it maps to btime. */
+			unsigned sub_offset = offset;
+			unsigned sub_remaining = datasize;
+
+			if (sub_remaining < 4)
+				break;
+			sub_offset += 4;
+			sub_remaining -= 4;
+
+			while (sub_remaining >= 4) {
+				unsigned short tag =
+				    archive_le16dec(p + sub_offset);
+				unsigned short size =
+				    archive_le16dec(p + sub_offset + 2);
+				sub_offset += 4;
+				sub_remaining -= 4;
+				if (size > sub_remaining)
+					break;
+				if (tag == 1 && size == 24) {
+					/* A raw FILETIME of 0 marks a slot
+					 * the writer didn't have a value
+					 * for (see the matching comment in
+					 * archive_write_set_format_zip.c);
+					 * treat it as absent rather than
+					 * decoding it as 1601-01-01. */
+					uint64_t raw;
+					int64_t secs;
+					uint32_t nsecs;
+
+					raw = archive_le64dec(p + sub_offset);
+					if (raw != 0) {
+						__archive_ntfs_to_unix(raw,
+						    &secs, &nsecs);
+						zip_entry->mtime = (time_t)secs;
+						zip_entry->mtime_ns = nsecs;
+						zip_entry->flags |= LA_NTFS_MTIME;
+						zip_entry->flags |= LA_MTIME_FROM_EXTRA;
+					}
+
+					raw = archive_le64dec(p + sub_offset + 8);
+					if (raw != 0) {
+						__archive_ntfs_to_unix(raw,
+						    &secs, &nsecs);
+						zip_entry->atime = (time_t)secs;
+						zip_entry->atime_ns = nsecs;
+						zip_entry->flags |= LA_NTFS_ATIME;
+						zip_entry->flags |= LA_ATIME_FROM_EXTRA;
+					}
+
+					raw = archive_le64dec(p + sub_offset + 16);
+					if (raw != 0) {
+						__archive_ntfs_to_unix(raw,
+						    &secs, &nsecs);
+						zip_entry->btime = (time_t)secs;
+						zip_entry->btime_ns = nsecs;
+						zip_entry->flags |= LA_NTFS_BTIME;
+					}
+				}
+				sub_offset += size;
+				sub_remaining -= size;
+			}
+			break;
+		}
 		case 0x000d:
 			/* PKWARE Unix Extra Field fixed metadata. */
 			if (datasize >= 12) {
-				zip_entry->atime = archive_le32dec(p + offset);
-				zip_entry->mtime =
-				    archive_le32dec(p + offset + 4);
+				if (!(zip_entry->flags & LA_NTFS_ATIME)) {
+					zip_entry->atime =
+					    to_time_t(archive_le32dec(p + offset));
+					zip_entry->atime_ns = 0;
+					zip_entry->flags |= LA_ATIME_FROM_EXTRA;
+				}
+				if (!(zip_entry->flags & LA_NTFS_MTIME)) {
+					zip_entry->mtime =
+					    to_time_t(archive_le32dec(p + offset + 4));
+					zip_entry->mtime_ns = 0;
+					zip_entry->flags |= LA_MTIME_FROM_EXTRA;
+				}
 				zip_entry->uid =
 				    archive_le16dec(p + offset + 8);
 				zip_entry->gid =
@@ -815,7 +931,12 @@ process_extra(struct archive_read *a, struct archive_entry *entry,
 #endif
 				if (datasize < 4)
 					break;
-				zip_entry->mtime = archive_le32dec(p + offset);
+				if (!(zip_entry->flags & LA_NTFS_MTIME)) {
+					zip_entry->mtime =
+					    to_time_t(archive_le32dec(p + offset));
+					zip_entry->mtime_ns = 0;
+					zip_entry->flags |= LA_MTIME_FROM_EXTRA;
+				}
 				offset += 4;
 				datasize -= 4;
 			}
@@ -823,7 +944,12 @@ process_extra(struct archive_read *a, struct archive_entry *entry,
 			{
 				if (datasize < 4)
 					break;
-				zip_entry->atime = archive_le32dec(p + offset);
+				if (!(zip_entry->flags & LA_NTFS_ATIME)) {
+					zip_entry->atime =
+					    to_time_t(archive_le32dec(p + offset));
+					zip_entry->atime_ns = 0;
+					zip_entry->flags |= LA_ATIME_FROM_EXTRA;
+				}
 				offset += 4;
 				datasize -= 4;
 			}
@@ -831,7 +957,9 @@ process_extra(struct archive_read *a, struct archive_entry *entry,
 			{
 				if (datasize < 4)
 					break;
-				zip_entry->ctime = archive_le32dec(p + offset);
+				zip_entry->ctime =
+				    to_time_t(archive_le32dec(p + offset));
+				zip_entry->flags |= LA_CTIME_FROM_EXTRA;
 				offset += 4;
 				datasize -= 4;
 			}
@@ -841,9 +969,18 @@ process_extra(struct archive_read *a, struct archive_entry *entry,
 		{
 			/* Info-ZIP Unix Extra Field (old version) "UX". */
 			if (datasize >= 8) {
-				zip_entry->atime = archive_le32dec(p + offset);
-				zip_entry->mtime =
-				    archive_le32dec(p + offset + 4);
+				if (!(zip_entry->flags & LA_NTFS_ATIME)) {
+					zip_entry->atime =
+					    to_time_t(archive_le32dec(p + offset));
+					zip_entry->atime_ns = 0;
+					zip_entry->flags |= LA_ATIME_FROM_EXTRA;
+				}
+				if (!(zip_entry->flags & LA_NTFS_MTIME)) {
+					zip_entry->mtime =
+					    to_time_t(archive_le32dec(p + offset + 4));
+					zip_entry->mtime_ns = 0;
+					zip_entry->flags |= LA_MTIME_FROM_EXTRA;
+				}
 			}
 			if (datasize >= 12) {
 				zip_entry->uid =
@@ -1158,7 +1295,16 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 	}
 	zip->init_decryption = (zip_entry->zip_flags & ZIP_ENCRYPTED);
 	zip_entry->compression = (char)archive_le16dec(p + 8);
-	zip_entry->mtime = __archive_dos_to_unix(archive_le32dec(p + 10));
+	/* This DOS timestamp carries no information a Central Directory
+	 * prescan wouldn't already have, and no sub-second precision:
+	 * only use it (and reset mtime_ns to match, since it has none) as
+	 * a fallback default, not an unconditional override of a more
+	 * precise value the prescan may have already established from an
+	 * extra field the Local Header doesn't itself repeat. */
+	if (!(zip_entry->flags & LA_MTIME_FROM_EXTRA)) {
+		zip_entry->mtime = __archive_dos_to_unix(archive_le32dec(p + 10));
+		zip_entry->mtime_ns = 0;
+	}
 	zip_entry->crc32 = archive_le32dec(p + 14);
 	if (zip_entry->zip_flags & ZIP_LENGTH_AT_END)
 		zip_entry->decdat = p[11];
@@ -1192,8 +1338,30 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 	else
 		sconv = zip->sconv_default;
 
-	if (archive_entry_copy_pathname_l(entry,
-	    h, filename_length, sconv) != 0) {
+	int str_copy_error = EAGAIN;
+#ifdef HAVE_LIBNATSPEC
+	if ((zip_entry->flags & LA_FROM_CENTRAL_DIRECTORY) && !(zip_entry->zip_flags & ZIP_UTF8_NAME)) {
+		const char *enable_natspec_env = getenv("LIBARCHIVE_ENABLE_LIBNATSPEC");
+		if (enable_natspec_env && strcmp(enable_natspec_env, "1") == 0 && filename_length < PATH_MAX) {
+			const char *fileenc = natspec_get_filename_encoding("");
+			const char *archive_oem_charset = natspec_get_charset_by_locale(NATSPEC_DOSCS, "");
+			char path[PATH_MAX];
+			memcpy(path, h, filename_length);
+			path[filename_length] = '\0';
+			char *converted_path = natspec_convert(path, fileenc, archive_oem_charset, 0);
+			if (converted_path) {
+				size_t converted_path_length = strlen(converted_path);
+				str_copy_error = archive_entry_copy_pathname_l(entry, converted_path, converted_path_length, sconv);
+				free(converted_path);
+			}
+		}
+	}
+#endif
+	if (str_copy_error == EAGAIN) {
+		str_copy_error = archive_entry_copy_pathname_l(entry, h, filename_length, sconv);
+	}
+
+	if (str_copy_error != 0) {
 		if (errno == ENOMEM) {
 			archive_set_error(&a->archive, ENOMEM,
 			    "Can't allocate memory for Pathname");
@@ -1353,9 +1521,17 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 	archive_entry_set_mode(entry, zip_entry->mode);
 	archive_entry_set_uid(entry, zip_entry->uid);
 	archive_entry_set_gid(entry, zip_entry->gid);
-	archive_entry_set_mtime(entry, zip_entry->mtime, 0);
-	archive_entry_set_ctime(entry, zip_entry->ctime, 0);
-	archive_entry_set_atime(entry, zip_entry->atime, 0);
+	archive_entry_set_mtime(entry, zip_entry->mtime, zip_entry->mtime_ns);
+	/* Without an extra field to supply them, leave atime and ctime
+	 * unset, rather than reporting them as set to the Unix epoch. */
+	if (zip_entry->flags & LA_CTIME_FROM_EXTRA)
+		archive_entry_set_ctime(entry, zip_entry->ctime, 0);
+	if (zip_entry->flags & LA_ATIME_FROM_EXTRA)
+		archive_entry_set_atime(entry, zip_entry->atime,
+		    zip_entry->atime_ns);
+	if (zip_entry->flags & LA_NTFS_BTIME)
+		archive_entry_set_birthtime(entry, zip_entry->btime,
+		    zip_entry->btime_ns);
 
 	if ((zip->entry->mode & AE_IFMT) == AE_IFLNK) {
 		size_t linkname_length;
@@ -2350,17 +2526,18 @@ zip_read_data_zipx_lzma_alone(struct archive_read *a, const void **buff,
 		}
 	}
 
-	if(zip->end_of_entry && zip->entry_bytes_remaining > 0) {
-		ssize_t remaining = (ssize_t)zip->entry_bytes_remaining;
-		const void *p = __archive_read_ahead(a, remaining, NULL);
-		if (p != NULL) {
-			if (zip->hctx_valid)
-				archive_hmac_sha1_update(&zip->hctx,
-				    p, remaining);
-			__archive_read_consume(a, remaining);
-			zip->entry_compressed_bytes_read += remaining;
-			zip->entry_bytes_remaining = 0;
-		}
+	while(zip->end_of_entry && zip->entry_bytes_remaining > 0) {
+		const void *p = __archive_read_ahead(a, 1, &bytes_avail);
+		if (p == NULL)
+			break;
+		if (bytes_avail > zip->entry_bytes_remaining)
+			bytes_avail = (ssize_t)zip->entry_bytes_remaining;
+		if (zip->hctx_valid)
+			archive_hmac_sha1_update(&zip->hctx,
+			    p, bytes_avail);
+		__archive_read_consume(a, bytes_avail);
+		zip->entry_compressed_bytes_read += bytes_avail;
+		zip->entry_bytes_remaining -= bytes_avail;
 	}
 
 	/* Free lzma decoder handle because we'll no longer need it. */
@@ -2623,6 +2800,7 @@ zip_read_data_zipx_bzip2(struct archive_read *a, const void **buff,
 	const void *sp;
 	int r;
 	uint64_t total_out;
+	static const ssize_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 
 	(void) offset; /* UNUSED */
 
@@ -2876,9 +3054,9 @@ zip_deflate_init(struct archive_read *a, struct zip *zip)
 	/* If we haven't yet read any data, initialize the decompressor. */
 	if (!zip->decompress_init) {
 		if (zip->stream_valid)
-			r = inflateReset(&zip->stream);
+			r = zng_inflateReset(&zip->stream);
 		else
-			r = inflateInit2(&zip->stream,
+			r = zng_inflateInit2(&zip->stream,
 			    -15 /* Don't check for zlib header */);
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
@@ -2902,6 +3080,7 @@ zip_read_data_deflate(struct archive_read *a, const void **buff,
 	const void *compressed_buff;
 	const void *sp;
 	int r;
+	static const ssize_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 
 	(void)offset; /* UNUSED */
 
@@ -2958,13 +3137,15 @@ zip_read_data_deflate(struct archive_read *a, const void **buff,
 	 * cast to remove 'const'.
 	 */
 	zip->stream.next_in = (Bytef *)(uintptr_t)(const void *)compressed_buff;
+	if (bytes_avail > max_decode_size)
+		bytes_avail = max_decode_size;
 	zip->stream.avail_in = (uInt)bytes_avail;
 	zip->stream.total_in = 0;
 	zip->stream.next_out = zip->uncompressed_buffer;
 	zip->stream.avail_out = (uInt)zip->uncompressed_buffer_size;
 	zip->stream.total_out = 0;
 
-	r = inflate(&zip->stream, 0);
+	r = zng_inflate(&zip->stream, Z_NO_FLUSH);
 	switch (r) {
 	case Z_OK:
 		break;
@@ -3536,7 +3717,7 @@ archive_read_format_zip_cleanup(struct archive_read *a)
 
 #ifdef HAVE_ZLIB_H
 	if (zip->stream_valid)
-		inflateEnd(&zip->stream);
+		zng_inflateEnd(&zip->stream);
 #endif
 
 #if HAVE_LZMA_H && HAVE_LIBLZMA
@@ -3824,69 +4005,20 @@ archive_read_format_zip_read_data_skip_streamable(struct archive_read *a)
 		return (ARCHIVE_OK);
 	}
 
-	if (zip->init_decryption) {
+	/* Validate the descriptor against decoded CRC and sizes. */
+	while (!zip->end_of_entry) {
+		int64_t offset = 0;
+		const void *buff = NULL;
+		size_t size = 0;
 		int r;
 
-		zip->has_encrypted_entries = 1;
-		if (zip->entry->zip_flags & ZIP_STRONG_ENCRYPTED)
-			r = read_decryption_header(a);
-		else if (zip->entry->compression == WINZIP_AES_ENCRYPTION)
-			r = init_WinZip_AES_decryption(a);
-		else
-			r = init_traditional_PKWARE_decryption(a);
+		r = archive_read_format_zip_read_data(a, &buff, &size, &offset);
+		if (r == ARCHIVE_EOF)
+			return (ARCHIVE_OK);
 		if (r != ARCHIVE_OK)
 			return (r);
-		zip->init_decryption = 0;
 	}
-
-	/* We're streaming and we don't know the length. */
-	/* If the body is compressed and we know the format, we can
-	 * find an exact end-of-entry by decompressing it. */
-	switch (zip->entry->compression) {
-#ifdef HAVE_ZLIB_H
-	case 8: /* Deflate compression. */
-		while (!zip->end_of_entry) {
-			int64_t offset = 0;
-			const void *buff = NULL;
-			size_t size = 0;
-			int r;
-			r =  zip_read_data_deflate(a, &buff, &size, &offset);
-			if (r != ARCHIVE_OK)
-				return (r);
-		}
-		return ARCHIVE_OK;
-#endif
-	default: /* Uncompressed or unknown. */
-		/* Scan for a PK\007\010 signature. */
-		for (;;) {
-			const char *p, *buff;
-			ssize_t bytes_avail;
-			buff = __archive_read_ahead(a, 16, &bytes_avail);
-			if (bytes_avail < 16) {
-				archive_set_error(&a->archive,
-				    ARCHIVE_ERRNO_FILE_FORMAT,
-				    "Truncated ZIP file data");
-				return (ARCHIVE_FATAL);
-			}
-			p = buff;
-			while (p <= buff + bytes_avail - 16) {
-				if (p[3] == 'P') { p += 3; }
-				else if (p[3] == 'K') { p += 2; }
-				else if (p[3] == '\007') { p += 1; }
-				else if (p[3] == '\010' && p[2] == '\007'
-				    && p[1] == 'K' && p[0] == 'P') {
-					if (zip->entry->flags & LA_USED_ZIP64)
-						__archive_read_consume(a,
-						    p - buff + 24);
-					else
-						__archive_read_consume(a,
-						    p - buff + 16);
-					return ARCHIVE_OK;
-				} else { p += 4; }
-			}
-			__archive_read_consume(a, p - buff);
-		}
-	}
+	return (ARCHIVE_OK);
 }
 
 int
@@ -4069,8 +4201,12 @@ archive_read_format_zip_seekable_bid(struct archive_read *a, int best_bid)
 	/* Boyer-Moore search backwards from the end, since we want
 	 * to match the last EOCD in the file (there can be more than
 	 * one if there is an uncompressed Zip archive as a member
-	 * within this Zip archive). */
-	for (i = tail - 22; i > 0;) {
+	 * within this Zip archive).
+	 *
+	 * The lower bound is inclusive (>= 0, not > 0): a minimal,
+	 * valid, zero-entry archive is exactly 22 bytes long, putting
+	 * the EOCD signature at index 0 of this search window. */
+	for (i = tail - 22; i >= 0;) {
 		switch (h[i]) {
 		case 'P':
 			if (memcmp(h + i, "PK\005\006", 4) == 0) {
@@ -4448,6 +4584,7 @@ zip_read_mac_metadata(struct archive_read *a, struct archive_entry *entry,
 	size_t remaining_bytes, metadata_bytes;
 	ssize_t hsize;
 	int ret = ARCHIVE_OK, eof;
+	static const ssize_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 
 	switch(rsrc->compression) {
 	case 0:  /* No compression. */
@@ -4541,13 +4678,15 @@ zip_read_mac_metadata(struct archive_read *a, struct archive_entry *entry,
 				goto exit_mac_metadata;
 			zip->stream.next_in =
 			    (Bytef *)(uintptr_t)(const void *)p;
+			if (bytes_avail > max_decode_size)
+				bytes_avail = max_decode_size;
 			zip->stream.avail_in = (uInt)bytes_avail;
 			zip->stream.total_in = 0;
 			zip->stream.next_out = mp;
 			zip->stream.avail_out = (uInt)metadata_bytes;
 			zip->stream.total_out = 0;
 
-			r = inflate(&zip->stream, 0);
+			r = zng_inflate(&zip->stream, Z_NO_FLUSH);
 			switch (r) {
 			case Z_OK:
 				break;

@@ -43,7 +43,9 @@
 #ifdef HAVE_LZMA_H
 #include <lzma.h>
 #endif
-#ifdef HAVE_ZLIB_H
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
 #include <zlib.h>
 #endif
 #ifdef HAVE_ZSTD_H
@@ -63,8 +65,8 @@
 
 
 #define _7ZIP_SIGNATURE	"7z\xBC\xAF\x27\x1C"
-#define SFX_MIN_ADDR	0x27000
-#define SFX_MAX_ADDR	0x60000
+#define SFX_MIN_ADDR	0x7000
+#define SFX_MAX_ADDR	0x90000
 #define SFX_MAX_OFFSET	(SFX_MAX_ADDR - SFX_MIN_ADDR)
 #define SFX_MAX_SEEK	0x800000
 
@@ -326,7 +328,7 @@ struct _7zip {
 #endif
 	/* Decoding deflate data. */
 #ifdef HAVE_ZLIB_H
-	z_stream		 stream;
+	zng_stream		 stream;
 	int			 stream_valid;
 #endif
 	/* Decoding Zstandard data. */
@@ -351,12 +353,20 @@ struct _7zip {
 
 	/* Decoding BCJ and BCJ2 data. */
 	uint32_t		 bcj_state;
-	size_t			 odd_bcj_size;
-	unsigned char		 odd_bcj[4];
+	size_t			 odd_bcj_size; /* Number of bytes currently stashed in odd_bcj. */
+	/* Bytes that a filter didn't have enough lookahead to transform yet.
+	 * Big enough to hold the largest lookahead (IA64). */
+	unsigned char		 odd_bcj[16];
+
 	/* Decoding BCJ data. */
 	size_t			 bcj_prevPosT;
 	uint32_t		 bcj_prevMask;
 	uint32_t		 bcj_ip;
+
+	/* Decoding Delta data. */
+	unsigned		 delta_dist;
+	uint8_t			 delta_pos;
+	uint8_t			 delta_history[256];
 
 	/* Decoding BCJ2 data. */
 	int64_t			 main_stream_bytes_remaining;
@@ -457,10 +467,17 @@ static void	x86_Init(struct _7zip *);
 static size_t	x86_Convert(struct _7zip *, uint8_t *, size_t);
 static void	arm_Init(struct _7zip *);
 static size_t	arm_Convert(struct _7zip *, uint8_t *, size_t);
+static void	armthumb_Init(struct _7zip *);
+static size_t	armthumb_Convert(struct _7zip *, uint8_t *, size_t);
 static size_t	arm64_Convert(struct _7zip *, uint8_t *, size_t);
 static ssize_t	Bcj2_Decode(struct _7zip *, uint8_t *, size_t);
 static size_t	sparc_Convert(struct _7zip *, uint8_t *, size_t);
 static size_t	powerpc_Convert(struct _7zip *, uint8_t *, size_t);
+static size_t	riscv_Convert(struct _7zip *, uint8_t *, size_t);
+static size_t	ia64_Convert(struct _7zip *, uint8_t *, size_t);
+static void	delta_Init(struct _7zip *, unsigned);
+static void	delta_Decode(struct _7zip *, uint8_t *, size_t);
+static size_t	bcj_lookahead(int64_t);
 static int64_t	seek_compat(struct archive_read *, int64_t, int, int);
 
 
@@ -963,7 +980,13 @@ archive_read_format_7zip_read_header(struct archive_read *a,
 		}
 	}
 
-	if (archive_entry_copy_pathname_l(entry,
+	if (zip_entry->utf16name == NULL) {
+		/*
+		 * No kName property (eg from`7z a -si`): 7-Zip derives the
+		 * name from the archive filename, which we don't know.
+		 */
+		archive_entry_set_pathname(entry, "data");
+	} else if (archive_entry_copy_pathname_l(entry,
 	    (const char *)zip_entry->utf16name,
 	    zip_entry->name_len, zip->sconv) != 0) {
 		if (errno == ENOMEM) {
@@ -1346,14 +1369,25 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 			if (coder2->codec != _7Z_X86 &&
 			    coder2->codec != _7Z_X86_BCJ2 &&
 			    coder2->codec != _7Z_ARM &&
+			    coder2->codec != _7Z_ARMTHUMB &&
 			    coder2->codec != _7Z_ARM64 &&
+			    coder2->codec != _7Z_IA64 &&
 			    coder2->codec != _7Z_POWERPC &&
-			    coder2->codec != _7Z_SPARC) {
+			    coder2->codec != _7Z_RISCV &&
+			    coder2->codec != _7Z_SPARC &&
+			    coder2->codec != _7Z_DELTA) {
 				archive_set_error(&a->archive,
 				    ARCHIVE_ERRNO_MISC,
 				    "Unsupported filter %jx for %jx",
 				    (uintmax_t)coder2->codec,
 				    (uintmax_t)coder1->codec);
+				return (ARCHIVE_FAILED);
+			}
+			if (coder2->codec == _7Z_DELTA &&
+			    coder2->propertiesSize != 1) {
+				archive_set_error(&a->archive,
+				    ARCHIVE_ERRNO_MISC,
+				    "Invalid Delta parameter");
 				return (ARCHIVE_FAILED);
 			}
 			zip->codec2 = coder2->codec;
@@ -1362,10 +1396,16 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 				x86_Init(zip);
 			else if (coder2->codec == _7Z_ARM)
 				arm_Init(zip);
+			else if (coder2->codec == _7Z_ARMTHUMB)
+				armthumb_Init(zip);
 			else if (coder2->codec == _7Z_ARM64 ||
+			    coder2->codec == _7Z_IA64 ||
 			    coder2->codec == _7Z_POWERPC ||
+			    coder2->codec == _7Z_RISCV ||
 			    coder2->codec == _7Z_SPARC)
 				zip->bcj_ip = 0;
+			else if (coder2->codec == _7Z_DELTA)
+				delta_Init(zip, coder2->properties[0] + 1);
 		}
 		break;
 	default:
@@ -1418,73 +1458,86 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 			zip->codec2 = coder2->codec;
 
 			filters[fi].options = NULL;
-			switch (zip->codec2) {
-			case _7Z_X86:
-				if (zip->codec == _7Z_LZMA2) {
+			/*
+			 * Only LZMA2 gets liblzma's branch filters; for LZMA1
+			 * we run our own instead, for the reason given above.
+			 */
+			if (zip->codec != _7Z_LZMA2 &&
+			    bcj_lookahead(zip->codec2) != 0) {
+				/* Use our filter. */
+				if (zip->codec2 == _7Z_X86)
+					x86_Init(zip);
+				else if (zip->codec2 == _7Z_ARM)
+					arm_Init(zip);
+				else if (zip->codec2 == _7Z_ARMTHUMB)
+					armthumb_Init(zip);
+				else /* ARM64, IA64, POWERPC, RISCV, SPARC. */
+					zip->bcj_ip = 0;
+			} else {
+				switch (zip->codec2) {
+				case _7Z_X86:
 					filters[fi].id = LZMA_FILTER_X86;
 					fi++;
-				} else
+					break;
+				case _7Z_X86_BCJ2:
 					/* Use our filter. */
-					x86_Init(zip);
-				break;
-			case _7Z_X86_BCJ2:
-				/* Use our filter. */
-				zip->bcj_state = 0;
-				break;
-			case _7Z_DELTA:
-				if (coder2->propertiesSize != 1) {
-					archive_set_error(&a->archive,
-					    ARCHIVE_ERRNO_MISC,
-					    "Invalid Delta parameter");
-					return (ARCHIVE_FAILED);
-				}
-				filters[fi].id = LZMA_FILTER_DELTA;
-				memset(&delta_opt, 0, sizeof(delta_opt));
-				delta_opt.type = LZMA_DELTA_TYPE_BYTE;
-				delta_opt.dist =
-				    coder2->properties[0] + 1;
-				filters[fi].options = &delta_opt;
-				fi++;
-				break;
-			/* Following filters have not been tested yet. */
-			case _7Z_POWERPC:
-				filters[fi].id = LZMA_FILTER_POWERPC;
-				fi++;
-				break;
-			case _7Z_IA64:
-				filters[fi].id = LZMA_FILTER_IA64;
-				fi++;
-				break;
-			case _7Z_ARM:
-				filters[fi].id = LZMA_FILTER_ARM;
-				fi++;
-				break;
-			case _7Z_ARMTHUMB:
-				filters[fi].id = LZMA_FILTER_ARMTHUMB;
-				fi++;
-				break;
+					zip->bcj_state = 0;
+					break;
+				case _7Z_DELTA:
+					if (coder2->propertiesSize != 1) {
+						archive_set_error(&a->archive,
+						    ARCHIVE_ERRNO_MISC,
+						    "Invalid Delta parameter");
+						return (ARCHIVE_FAILED);
+					}
+					filters[fi].id = LZMA_FILTER_DELTA;
+					memset(&delta_opt, 0, sizeof(delta_opt));
+					delta_opt.type = LZMA_DELTA_TYPE_BYTE;
+					delta_opt.dist =
+					    coder2->properties[0] + 1;
+					filters[fi].options = &delta_opt;
+					fi++;
+					break;
+				/* Following filters have not been tested yet. */
+				case _7Z_POWERPC:
+					filters[fi].id = LZMA_FILTER_POWERPC;
+					fi++;
+					break;
+				case _7Z_IA64:
+					filters[fi].id = LZMA_FILTER_IA64;
+					fi++;
+					break;
+				case _7Z_ARM:
+					filters[fi].id = LZMA_FILTER_ARM;
+					fi++;
+					break;
+				case _7Z_ARMTHUMB:
+					filters[fi].id = LZMA_FILTER_ARMTHUMB;
+					fi++;
+					break;
 #ifdef LZMA_FILTER_ARM64
-			case _7Z_ARM64:
-				filters[fi].id = LZMA_FILTER_ARM64;
-				fi++;
-				break;
+				case _7Z_ARM64:
+					filters[fi].id = LZMA_FILTER_ARM64;
+					fi++;
+					break;
 #endif
 #ifdef LZMA_FILTER_RISCV
-			case _7Z_RISCV:
-				filters[fi].id = LZMA_FILTER_RISCV;
-				fi++;
-				break;
+				case _7Z_RISCV:
+					filters[fi].id = LZMA_FILTER_RISCV;
+					fi++;
+					break;
 #endif
-			case _7Z_SPARC:
-				filters[fi].id = LZMA_FILTER_SPARC;
-				fi++;
-				break;
-			default:
-				archive_set_error(&a->archive,
-				    ARCHIVE_ERRNO_MISC,
-				    "Unexpected codec ID: %jX",
-				    (uintmax_t)zip->codec2);
-				return (ARCHIVE_FAILED);
+				case _7Z_SPARC:
+					filters[fi].id = LZMA_FILTER_SPARC;
+					fi++;
+					break;
+				default:
+					archive_set_error(&a->archive,
+					    ARCHIVE_ERRNO_MISC,
+					    "Unexpected codec ID: %jX",
+					    (uintmax_t)zip->codec2);
+					return (ARCHIVE_FAILED);
+				}
 			}
 		}
 
@@ -1580,9 +1633,9 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 	case _7Z_DEFLATE:
 #ifdef HAVE_ZLIB_H
 		if (zip->stream_valid)
-			r = inflateReset(&(zip->stream));
+			r = zng_inflateReset(&(zip->stream));
 		else
-			r = inflateInit2(&(zip->stream),
+			r = zng_inflateInit2(&(zip->stream),
 			    -15 /* Don't check for zlib header */);
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
@@ -1683,6 +1736,7 @@ decompress(struct archive_read *a, struct _7zip *zip,
 	size_t t_avail_in, t_avail_out;
 	uint8_t *bcj2_next_out;
 	size_t bcj2_avail_out;
+	size_t odd_bcj_out = 0;
 	int r, ret = ARCHIVE_OK;
 
 	t_avail_in = o_avail_in = *used;
@@ -1690,12 +1744,14 @@ decompress(struct archive_read *a, struct _7zip *zip,
 	t_next_in = b;
 	t_next_out = buff;
 
-	if (zip->codec != _7Z_LZMA2 && zip->codec2 == _7Z_X86) {
+	if (zip->codec != _7Z_LZMA2 && bcj_lookahead(zip->codec2) != 0) {
 		int i;
+		size_t min_out = bcj_lookahead(zip->codec2);
 
 		/* Do not copy out the BCJ remaining bytes when the output
-		 * buffer size is less than five bytes. */
-		if (o_avail_in != 0 && t_avail_out < 5 && zip->odd_bcj_size) {
+		 * buffer size is less than the filter's lookahead size. */
+		if (o_avail_in != 0 && t_avail_out < min_out &&
+		    zip->odd_bcj_size) {
 			*used = 0;
 			*outbytes = 0;
 			return (ret);
@@ -1704,8 +1760,17 @@ decompress(struct archive_read *a, struct _7zip *zip,
 			*t_next_out++ = zip->odd_bcj[i];
 			t_avail_out--;
 			zip->odd_bcj_size--;
+			odd_bcj_out++;
 		}
-		if (o_avail_in == 0 || t_avail_out == 0) {
+		/*
+		 * PPMd is the only codec which can still produce output
+		 * after its packed stream has been consumed: it is asked
+		 * to flush the rest of the folder when called with no
+		 * input. Returning here would skip that flush and leave
+		 * the folder short, so let it through.
+		 */
+		if ((o_avail_in == 0 && zip->codec != _7Z_PPMD) ||
+		    t_avail_out == 0) {
 			*used = o_avail_in - t_avail_in;
 			*outbytes = o_avail_out - t_avail_out;
 			if (o_avail_in == 0)
@@ -1836,7 +1901,7 @@ decompress(struct archive_read *a, struct _7zip *zip,
 		zip->stream.avail_in = (uInt)t_avail_in;
 		zip->stream.next_out = t_next_out;
 		zip->stream.avail_out = (uInt)t_avail_out;
-		r = inflate(&(zip->stream), 0);
+		r = zng_inflate(&(zip->stream), Z_NO_FLUSH);
 		switch (r) {
 		case Z_STREAM_END: /* Found end of stream. */
 			ret = ARCHIVE_EOF;
@@ -1909,10 +1974,20 @@ decompress(struct archive_read *a, struct _7zip *zip,
 			zip->ppmd7_stat = 1;
 		}
 
-		if (t_avail_in == 0)
-			/* XXX Flush out remaining decoded data XXX */
-			flush_bytes = zip->folder_outbytes_remaining;
-		else
+		if (t_avail_in == 0) {
+			/* XXX Flush out remaining decoded data XXX
+			 *
+			 * The bytes a BCJ filter parked on the previous call
+			 * have just been written to the output buffer, and
+			 * count towards what the folder still owes. Asking
+			 * PPMd to decode them a second time would run the
+			 * range decoder off the end of the packed stream. */
+			flush_bytes = zip->folder_outbytes_remaining -
+			    (int64_t)odd_bcj_out;
+			/* Those bytes were all that was left of the folder. */
+			if (flush_bytes <= 0)
+				break;
+		} else
 			flush_bytes = 0;
 
 		do {
@@ -1959,28 +2034,55 @@ decompress(struct archive_read *a, struct _7zip *zip,
 	/*
 	 * Decode BCJ.
 	 */
-	if (zip->codec != _7Z_LZMA2) {
-		if (zip->codec2 == _7Z_X86) {
-			size_t l = x86_Convert(zip, buff, *outbytes);
+	if (zip->codec != _7Z_LZMA2 && bcj_lookahead(zip->codec2) != 0) {
+		size_t l;
 
-			zip->odd_bcj_size = *outbytes - l;
-			if (zip->odd_bcj_size > 0 && zip->odd_bcj_size <= 4 &&
-			    o_avail_in && ret != ARCHIVE_EOF) {
-				memcpy(zip->odd_bcj,
-				    ((unsigned char *)buff) + l,
-				    zip->odd_bcj_size);
-				*outbytes = l;
-			} else
-				zip->odd_bcj_size = 0;
-		} else if (zip->codec2 == _7Z_ARM) {
-			*outbytes = arm_Convert(zip, buff, *outbytes);
-		} else if (zip->codec2 == _7Z_ARM64) {
-			*outbytes = arm64_Convert(zip, buff, *outbytes);
-		} else if (zip->codec2 == _7Z_SPARC) {
-			*outbytes = sparc_Convert(zip, buff, *outbytes);
-		} else if (zip->codec2 == _7Z_POWERPC) {
-			*outbytes = powerpc_Convert(zip, buff, *outbytes);
+		switch (zip->codec2) {
+		case _7Z_X86:
+			l = x86_Convert(zip, buff, *outbytes);
+			break;
+		case _7Z_ARM:
+			l = arm_Convert(zip, buff, *outbytes);
+			break;
+		case _7Z_ARMTHUMB:
+			l = armthumb_Convert(zip, buff, *outbytes);
+			break;
+		case _7Z_ARM64:
+			l = arm64_Convert(zip, buff, *outbytes);
+			break;
+		case _7Z_SPARC:
+			l = sparc_Convert(zip, buff, *outbytes);
+			break;
+		case _7Z_POWERPC:
+			l = powerpc_Convert(zip, buff, *outbytes);
+			break;
+		case _7Z_RISCV:
+			l = riscv_Convert(zip, buff, *outbytes);
+			break;
+		case _7Z_IA64:
+			l = ia64_Convert(zip, buff, *outbytes);
+			break;
+		default:
+			/* Unreachable: bcj_lookahead() returns non-zero only
+			 * for the codecs handled above. Guards against the two
+			 * lists drifting apart. */
+			archive_set_error(&(a->archive), ARCHIVE_ERRNO_MISC,
+			    "BCJ filter internal error");
+			return (ARCHIVE_FAILED);
 		}
+
+		/* Keep the bytes which could not be converted yet, they are
+		 * prepended to the output buffer on the next call. */
+		zip->odd_bcj_size = *outbytes - l;
+		if (zip->odd_bcj_size > 0 &&
+		    zip->odd_bcj_size <= sizeof(zip->odd_bcj) &&
+		    o_avail_in && ret != ARCHIVE_EOF) {
+			memcpy(zip->odd_bcj,
+			    ((unsigned char *)buff) + l,
+			    zip->odd_bcj_size);
+			*outbytes = l;
+		} else
+			zip->odd_bcj_size = 0;
 	}
 
 	/*
@@ -2008,6 +2110,13 @@ decompress(struct archive_read *a, struct _7zip *zip,
 		bcj2_avail_out -= bytes;
 		*outbytes = o_avail_out - bcj2_avail_out;
 	}
+
+	/*
+	 * Decode Delta. LZMA1 and LZMA2 use liblzma's Delta filter instead.
+	 */
+	if (zip->codec2 == _7Z_DELTA &&
+	    zip->codec != _7Z_LZMA && zip->codec != _7Z_LZMA2)
+		delta_Decode(zip, buff, *outbytes);
 
 	return (ret);
 }
@@ -2038,7 +2147,7 @@ free_decompression(struct archive_read *a, struct _7zip *zip)
 #endif
 #ifdef HAVE_ZLIB_H
 	if (zip->stream_valid) {
-		if (inflateEnd(&(zip->stream)) != Z_OK) {
+		if (zng_inflateEnd(&(zip->stream)) != Z_OK) {
 			archive_set_error(&a->archive,
 			    ARCHIVE_ERRNO_MISC,
 			    "Failed to clean up zlib decompressor");
@@ -3086,7 +3195,7 @@ read_Header(struct archive_read *a, struct _7z_header_info *h,
 		if (entries[i].flg & HAS_STREAM) {
 			if (sindex >= si->ss.unpack_streams)
 				return (-1);
-			if (entries[i].mode == 0)
+			if (entries[i].mode == 0 || ((entries[i].mode & 0444) == 0))
 				entries[i].mode = AE_IFREG | 0666;
 			if (si->ss.digestsDefined[sindex])
 				entries[i].flg |= CRC32_IS_SET;
@@ -3532,6 +3641,7 @@ align_size(size_t s)
 static ssize_t
 extract_pack_stream(struct archive_read *a, size_t minimum)
 {
+	static const size_t max_decode_size = 64 * 1024 * 1024; // 64MiB
 	struct _7zip *zip = a->format->data;
 	ssize_t bytes_avail;
 	int r;
@@ -3638,6 +3748,8 @@ extract_pack_stream(struct archive_read *a, size_t minimum)
 		bytes_in = bytes_avail;
 		if (bytes_in > (uint64_t)zip->pack_stream_inbytes_remaining)
 			bytes_in = (size_t)zip->pack_stream_inbytes_remaining;
+		if (bytes_in > max_decode_size)
+			bytes_in = max_decode_size;
 		/* Drive decompression. */
 		r = decompress(a, zip, buff_out, &bytes_out,
 			buff_in, &bytes_in);
@@ -3664,8 +3776,9 @@ extract_pack_stream(struct archive_read *a, size_t minimum)
 		if (zip->uncompressed_buffer_bytes_remaining ==
 		    zip->uncompressed_buffer_size)
 			break;
-		if (zip->codec2 == _7Z_X86 && zip->odd_bcj_size &&
-		    zip->uncompressed_buffer_bytes_remaining + 5 >
+		if (zip->odd_bcj_size &&
+		    zip->uncompressed_buffer_bytes_remaining +
+		    bcj_lookahead(zip->codec2) >
 		    zip->uncompressed_buffer_size)
 			break;
 		if (zip->pack_stream_inbytes_remaining == 0 &&
@@ -3836,6 +3949,22 @@ read_stream(struct archive_read *a, const void **buff, size_t size,
 	return (get_uncompressed_data(a, buff, size, minimum));
 }
 
+/* Returns the name of a compressor codec, or NULL if not a compressor. */
+static const char *
+compressor_name(int64_t codec)
+{
+	switch (codec) {
+	case _7Z_COPY:    return ("Copy");
+	case _7Z_LZMA:    return ("LZMA");
+	case _7Z_LZMA2:   return ("LZMA2");
+	case _7Z_DEFLATE: return ("Deflate");
+	case _7Z_BZ2:     return ("BZip2");
+	case _7Z_PPMD:    return ("PPMd");
+	case _7Z_ZSTD:    return ("Zstd");
+	default:          return (NULL);
+	}
+}
+
 static int
 setup_decode_folder(struct archive_read *a, struct _7z_folder *folder,
     int header)
@@ -3895,6 +4024,24 @@ setup_decode_folder(struct archive_read *a, struct _7z_folder *folder,
 		    ARCHIVE_ERRNO_MISC,
 		    "The %s is encoded with many filters, "
 		    "but currently not supported", cname);
+		return (header ? ARCHIVE_FATAL : ARCHIVE_FAILED);
+	}
+
+	/*
+	 * 7-Zip can be asked to chain two compressors in one folder
+	 * (e.g. -m0=LZMA2 -m1=LZMA2). This is slow and gains nothing.
+	 * Our decoder intentionally only supports a compressor
+	 * followed by an optional filter.
+	 */
+	if (folder->numCoders == 2 && !found_bcj2 &&
+	    compressor_name(folder->coders[0].codec) != NULL &&
+	    compressor_name(folder->coders[1].codec) != NULL) {
+		archive_set_error(&(a->archive),
+		    ARCHIVE_ERRNO_MISC,
+		    "The %s is compressed twice with chained compressors "
+		    "(%s and %s), which is not supported", cname,
+		    compressor_name(folder->coders[0].codec),
+		    compressor_name(folder->coders[1].codec));
 		return (header ? ARCHIVE_FATAL : ARCHIVE_FAILED);
 	}
 
@@ -4294,6 +4441,54 @@ arm_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
 	return i;
 }
 
+static void
+armthumb_Init(struct _7zip *zip)
+{
+	zip->bcj_ip = 4;
+}
+
+static size_t
+armthumb_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
+{
+	// This function was adapted from
+	// static size_t bcj_armthumb(struct xz_dec_bcj *s, uint8_t *buf, size_t size)
+	// in https://git.tukaani.org/xz-embedded.git
+
+	/*
+	 * Branch/Call/Jump (BCJ) filter decoders
+	 *
+	 * Authors: Lasse Collin <lasse.collin@tukaani.org>
+	 *          Igor Pavlov <https://7-zip.org/>
+	 *
+	 * SPDX-License-Identifier: 0BSD
+	 */
+
+	size_t i;
+	uint32_t addr;
+
+	for (i = 0; i + 4 <= size; i += 2) {
+		if ((buf[i + 1] & 0xF8) == 0xF0
+		    && (buf[i + 3] & 0xF8) == 0xF8) {
+			addr = (((uint32_t)buf[i + 1] & 0x07) << 19)
+			    | ((uint32_t)buf[i] << 11)
+			    | (((uint32_t)buf[i + 3] & 0x07) << 8)
+			    | (uint32_t)buf[i + 2];
+			addr <<= 1;
+			addr -= zip->bcj_ip + (uint32_t)i;
+			addr >>= 1;
+			buf[i + 1] = (uint8_t)(0xF0 | ((addr >> 19) & 0x07));
+			buf[i] = (uint8_t)(addr >> 11);
+			buf[i + 3] = (uint8_t)(0xF8 | ((addr >> 8) & 0x07));
+			buf[i + 2] = (uint8_t)addr;
+			i += 2;
+		}
+	}
+
+	zip->bcj_ip += (uint32_t)i;
+
+	return i;
+}
+
 static size_t
 arm64_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
 {
@@ -4455,6 +4650,260 @@ powerpc_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
 	zip->bcj_ip += (uint32_t)i;
 
 	return i;
+}
+
+static size_t
+riscv_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
+{
+	// This function was adapted from
+	// static size_t bcj_riscv(struct xz_dec_bcj *s, uint8_t *buf, size_t size)
+	// in https://git.tukaani.org/xz-embedded.git
+
+	/*
+	 * Branch/Call/Jump (BCJ) filter decoders
+	 *
+	 * Authors: Lasse Collin <lasse.collin@tukaani.org>
+	 *          Igor Pavlov <https://7-zip.org/>
+	 *
+	 * SPDX-License-Identifier: 0BSD
+	 */
+
+	if (size < 8)
+		return 0;
+	size -= 8;
+
+	size_t i;
+	for (i = 0; i <= size; i += 2) {
+		uint32_t inst = buf[i];
+
+		if (inst == 0xEF) {
+			// JAL. Only filter rd=x1(ra) and rd=x5(t0).
+			const uint32_t b1 = buf[i + 1];
+
+			if ((b1 & 0x0D) != 0)
+				continue;
+
+			const uint32_t b2 = buf[i + 2];
+			const uint32_t b3 = buf[i + 3];
+
+			uint32_t addr = ((b1 & 0xF0) << 13)
+					| (b2 << 9) | (b3 << 1);
+			addr -= zip->bcj_ip + (uint32_t)i;
+
+			buf[i + 1] = (uint8_t)((b1 & 0x0F)
+					| ((addr >> 8) & 0xF0));
+			buf[i + 2] = (uint8_t)(((addr >> 16) & 0x0F)
+					| ((addr >> 7) & 0x10)
+					| ((addr << 4) & 0xE0));
+			buf[i + 3] = (uint8_t)(((addr >> 4) & 0x7F)
+					| ((addr >> 13) & 0x80));
+
+			i += 4 - 2;
+		} else if ((inst & 0x7F) == 0x17) {
+			// AUIPC, paired with a second instruction (inst2)
+			// that is within the next four bytes.
+			uint32_t inst2;
+
+			inst |= (uint32_t)buf[i + 1] << 8;
+			inst |= (uint32_t)buf[i + 2] << 16;
+			inst |= (uint32_t)buf[i + 3] << 24;
+
+			if (inst & 0xE80) {
+				// AUIPC's rd doesn't equal x0 or x2.
+				inst2 = archive_le32dec(buf + i + 4);
+
+				if (((inst << 8) ^ (inst2 - 3)) & 0xF8003) {
+					i += 6 - 2;
+					continue;
+				}
+
+				uint32_t addr = (inst & 0xFFFFF000)
+						+ (inst2 >> 20);
+
+				inst = 0x17 | (2 << 7) | (inst2 << 12);
+				inst2 = addr;
+			} else {
+				// AUIPC's rd equals x0 or x2.
+				const uint32_t inst2_rs1 = inst >> 27;
+
+				if ((uint32_t)((inst - 0x3117) << 18)
+						>= (inst2_rs1 & 0x1D)) {
+					i += 4 - 2;
+					continue;
+				}
+
+				uint32_t addr = archive_be32dec(buf + i + 4);
+				addr -= zip->bcj_ip + (uint32_t)i;
+
+				inst2 = (inst >> 12) | (addr << 20);
+				inst = 0x17 | (inst2_rs1 << 7)
+					| ((addr + 0x800) & 0xFFFFF000);
+			}
+
+			archive_le32enc(buf + i, inst);
+			archive_le32enc(buf + i + 4, inst2);
+
+			i += 8 - 2;
+		}
+	}
+
+	zip->bcj_ip += (uint32_t)i;
+
+	return i;
+}
+
+static size_t
+ia64_Convert(struct _7zip *zip, uint8_t *buf, size_t size)
+{
+	// This function was adapted from
+	// static size_t bcj_ia64(struct xz_dec_bcj *s, uint8_t *buf, size_t size)
+	// in https://git.tukaani.org/xz-embedded.git
+
+	/*
+	 * Branch/Call/Jump (BCJ) filter decoders
+	 *
+	 * Authors: Lasse Collin <lasse.collin@tukaani.org>
+	 *          Igor Pavlov <https://7-zip.org/>
+	 *
+	 * SPDX-License-Identifier: 0BSD
+	 */
+
+	static const uint8_t branch_table[32] = {
+		0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0,
+		4, 4, 6, 6, 0, 0, 7, 7,
+		4, 4, 0, 0, 4, 4, 0, 0
+	};
+
+	/* Loop counters */
+	size_t i;
+	size_t j;
+
+	/* Instruction slot (0, 1, or 2) in the 128-bit instruction word */
+	uint32_t slot;
+
+	/* Bitwise offset of the instruction indicated by slot */
+	uint32_t bit_pos;
+
+	/* bit_pos split into byte and bit parts */
+	uint32_t byte_pos;
+	uint32_t bit_res;
+
+	/* Address part of an instruction */
+	uint32_t addr;
+
+	/* Mask used to detect which instructions to convert */
+	uint32_t mask;
+
+	/* 41-bit instruction stored somewhere in the lowest 48 bits */
+	uint64_t instr;
+
+	/* Instruction normalized with bit_res for easier manipulation */
+	uint64_t norm;
+
+	size &= ~(size_t)15;
+
+	for (i = 0; i < size; i += 16) {
+		mask = branch_table[buf[i] & 0x1F];
+		for (slot = 0, bit_pos = 5; slot < 3; ++slot, bit_pos += 41) {
+			if (((mask >> slot) & 1) == 0)
+				continue;
+
+			byte_pos = bit_pos >> 3;
+			bit_res = bit_pos & 7;
+			instr = 0;
+			for (j = 0; j < 6; ++j)
+				instr |= (uint64_t)(buf[i + j + byte_pos])
+				    << (8 * j);
+
+			norm = instr >> bit_res;
+
+			if (((norm >> 37) & 0x0F) == 0x05
+			    && ((norm >> 9) & 0x07) == 0) {
+				addr = (norm >> 13) & 0x0FFFFF;
+				addr |= ((uint32_t)(norm >> 36) & 1) << 20;
+				addr <<= 4;
+				addr -= zip->bcj_ip + (uint32_t)i;
+				addr >>= 4;
+
+				norm &= ~((uint64_t)0x8FFFFF << 13);
+				norm |= (uint64_t)(addr & 0x0FFFFF) << 13;
+				norm |= (uint64_t)(addr & 0x100000)
+				    << (36 - 20);
+
+				instr &= (1U << bit_res) - 1;
+				instr |= norm << bit_res;
+
+				for (j = 0; j < 6; j++)
+					buf[i + j + byte_pos]
+					    = (uint8_t)(instr >> (8 * j));
+			}
+		}
+	}
+
+	zip->bcj_ip += (uint32_t)i;
+
+	return i;
+}
+
+static void
+delta_Init(struct _7zip *zip, unsigned dist)
+{
+	zip->delta_dist = dist;
+	zip->delta_pos = 0;
+	memset(zip->delta_history, 0, sizeof(zip->delta_history));
+}
+
+static void
+delta_Decode(struct _7zip *zip, uint8_t *buf, size_t size)
+{
+	// This was adapted from src/liblzma/delta/delta_decoder.c's
+	// static void decode_buffer(lzma_delta_coder *coder, uint8_t *buffer, size_t size)
+	// function in https://github.com/tukaani-project/xz.git
+
+	/*
+	 * Delta filter decoder
+	 *
+	 * Author: Lasse Collin
+	 *
+	 * SPDX-License-Identifier: 0BSD
+	 */
+
+	size_t i;
+
+	for (i = 0; i < size; i++) {
+		buf[i] += zip->delta_history[
+			(zip->delta_dist + zip->delta_pos) & 0xFF];
+		zip->delta_history[zip->delta_pos--] = buf[i];
+	}
+}
+
+/*
+ * The widest instruction the BCJ filters rewrite, and the smallest output
+ * buffer that those filters can make progress with. Filters leave up to one
+ * byte less than this unconverted at the end of a buffer (when they don't
+ * have enough data to continue). Returns 0 for codecs we do not filter
+ * ourselves.
+ */
+static size_t
+bcj_lookahead(int64_t codec2)
+{
+	switch (codec2) {
+	case _7Z_X86:
+		return (5);
+	case _7Z_RISCV:
+		return (8);
+	case _7Z_IA64:
+		return (16);
+	case _7Z_ARM:
+	case _7Z_ARMTHUMB:
+	case _7Z_ARM64:
+	case _7Z_POWERPC:
+	case _7Z_SPARC:
+		return (4);
+	default:
+		return (0);
+	}
 }
 
 /*

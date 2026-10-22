@@ -39,9 +39,6 @@
 #elif defined(__FreeBSD__)
 /* Building as part of FreeBSD system requires a pre-built config.h. */
 #include "config_freebsd.h"
-#elif defined(__NetBSD__)
-/* Building as part of NetBSD system requires a pre-built config.h. */
-#include "config_netbsd.h"
 #elif defined(_WIN32) && !defined(__CYGWIN__)
 /* Win32 can't run the 'configure' script. */
 #include "config_windows.h"
@@ -56,7 +53,7 @@
 #endif
 #include <sys/stat.h>
 
-#if HAVE_DIRENT_H
+#ifdef HAVE_DIRENT_H
 #include <dirent.h>
 #endif
 #ifdef HAVE_DIRECT_H
@@ -323,7 +320,11 @@ int assertion_non_empty_file(const char *, int, const char *);
 int assertion_set_nodump(const char *, int, const char *);
 int assertion_text_file_contents(const char *, int, const char *buff, const char *f);
 int assertion_umask(const char *, int, int);
+#if !defined(_WIN32) // suseconds_t ~ long ~ decltype(timeval::tv_nsec)
 int assertion_utimes(const char *, int, const char *, time_t, suseconds_t, time_t, suseconds_t);
+#else
+int assertion_utimes(const char*, int, const char*, time_t, long, time_t, long);
+#endif
 int assertion_version(const char*, int, const char *, const char *);
 
 void skipping_setup(const char *, int);
@@ -389,8 +390,8 @@ void *getXattr(const char *, const char *, size_t *);
 /* Set extended attribute */
 int setXattr(const char *, const char *, const void *, size_t);
 
-/* Return true if the file has large i-node number(>0xffffffff). */
-int is_LargeInode(const char *);
+/* Set locale and check its usability. */
+int setCheckedLocale(const char *, const char *, wchar_t);
 
 #if ARCHIVE_ACL_SUNOS
 /* Fetch ACLs on Solaris using acl() or facl() */

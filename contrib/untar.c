@@ -38,6 +38,7 @@
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <windows.h>
+#include <direct.h>			// _mkdir
 #endif
 
 #define BLOCKSIZE 512
@@ -53,6 +54,11 @@ system_mkdir(char *pathname, int mode)
 	return mkdir(pathname, mode);
 #endif
 }
+
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
 
 /* Parse an octal number, ignoring leading and trailing nonsense. */
 static unsigned long
@@ -227,8 +233,12 @@ untar(FILE *a, const char *path)
 	}
 }
 
-int
-main(int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_untar_contrib_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	FILE *a;
 

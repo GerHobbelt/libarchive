@@ -58,6 +58,11 @@
 #include "lafe_err.h"
 #include "lafe_setmode.h"
 
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
+
+
 #if ARCHIVE_VERSION_NUMBER < 4000000 && !defined(_PATH_DEFTAPE)
 // Libarchive 4.0 and later will NOT define _PATH_DEFTAPE
 // but will honor it if it's set in the build.
@@ -135,8 +140,12 @@ static char const * const vcs_files[] = {
   NULL
 };
 
-int
-main(int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_bsdtar_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	struct bsdtar		*bsdtar, bsdtar_storage;
 	int			 opt, t;

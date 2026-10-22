@@ -38,16 +38,15 @@
 #ifdef HAVE_STRING_H
 #include <string.h>
 #endif
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
 #ifdef HAVE_LZO_LZOCONF_H
 #include <lzo/lzoconf.h>
 #endif
 #ifdef HAVE_LZO_LZO1X_H
 #include <lzo/lzo1x.h>
 #endif
-#ifdef HAVE_ZLIB_H
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
 #include <zlib.h> /* for crc32 and adler32 */
 #endif
 

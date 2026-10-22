@@ -55,6 +55,8 @@
 # include <stdint.h>
 #elif !defined(__WATCOMC__) && !defined(_MSC_VER) && !defined(__INTERIX) && !defined(__BORLANDC__) && !defined(_SCO_DS) && !defined(__osf__) && !defined(__CLANG_INTTYPES_H)
 # include <inttypes.h>
+#elif defined(_MSC_VER)
+# include <stdint.h>
 #endif
 
 /* Get appropriate definitions of 64-bit integer */
@@ -127,7 +129,9 @@ typedef ssize_t la_ssize_t;
  * libarchive source should ever define __LIBARCHIVE_BUILD.
  */
 #if ((defined __WIN32__) || (defined _WIN32) || defined(__CYGWIN__)) && (!defined LIBARCHIVE_STATIC)
-# ifdef __LIBARCHIVE_BUILD
+# if defined(BUILDING_LIBARCHIVE) && defined(ARCHIVE_STATICLIB)
+#   define __LA_DECL
+# elif defined(__LIBARCHIVE_BUILD)
 #  ifdef __GNUC__
 #   define __LA_DECL	__attribute__((dllexport)) extern
 #  else
@@ -204,6 +208,7 @@ __LA_DECL const char *  archive_liblzo2_version(void);
 __LA_DECL const char *  archive_libexpat_version(void);
 __LA_DECL const char *  archive_libbsdxml_version(void);
 __LA_DECL const char *  archive_libxml2_version(void);
+__LA_DECL const char *  archive_xmllite_version(void);
 __LA_DECL const char *  archive_mbedtls_version(void);
 __LA_DECL const char *  archive_nettle_version(void);
 __LA_DECL const char *  archive_openssl_version(void);
@@ -273,7 +278,8 @@ typedef la_int64_t	archive_skip_callback(struct archive *,
 
 /* Seeks to specified location in the file and returns the position.
  * Whence values are SEEK_SET, SEEK_CUR, SEEK_END from stdio.h.
- * Return ARCHIVE_FATAL if the seek fails for any reason.
+ * Return ARCHIVE_FAILED if the seek failed in a way that keeps its
+ * current read position, ARCHIVE_FATAL for any other error reason.
  */
 typedef la_int64_t	archive_seek_callback(struct archive *,
     void *_client_data, la_int64_t offset, int whence);
@@ -321,6 +327,7 @@ typedef const char *archive_passphrase_callback(struct archive *,
 #define	ARCHIVE_FILTER_GRZIP	12
 #define	ARCHIVE_FILTER_LZ4	13
 #define	ARCHIVE_FILTER_ZSTD	14
+#define	ARCHIVE_FILTER_B64	15
 
 #if ARCHIVE_VERSION_NUMBER < 4000000
 #define	ARCHIVE_COMPRESSION_NONE	ARCHIVE_FILTER_NONE
@@ -334,6 +341,7 @@ typedef const char *archive_passphrase_callback(struct archive *,
 #define	ARCHIVE_COMPRESSION_RPM		ARCHIVE_FILTER_RPM
 #define	ARCHIVE_COMPRESSION_LZIP	ARCHIVE_FILTER_LZIP
 #define	ARCHIVE_COMPRESSION_LRZIP	ARCHIVE_FILTER_LRZIP
+#define	ARCHIVE_COMPRESSION_B64		ARCHIVE_FILTER_B64
 #endif
 
 /*
@@ -647,7 +655,7 @@ __LA_DECL la_int64_t archive_seek_data(struct archive *, la_int64_t, int);
  * A zero-copy version of archive_read_data that also exposes the file offset
  * of each returned block.  Note that the client has no way to specify
  * the desired size of the block.  The API does guarantee that offsets will
- * be strictly increasing and that returned blocks will not overlap.
+ * be increasing and that returned blocks will not overlap.
  */
 __LA_DECL int archive_read_data_block(struct archive *a,
 		    const void **buff, size_t *size, la_int64_t *offset);

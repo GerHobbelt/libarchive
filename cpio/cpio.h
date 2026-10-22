@@ -34,7 +34,6 @@ struct cpio {
 	int		  dot;  /* -V */
 	int		  quiet;   /* --quiet */
 	int		  extract_flags; /* Flags for extract operation */
-	const char	 *compress_program;
 	int		  option_append; /* -A, only relevant for -o */
 	int		  option_atime_restore; /* -a */
 	int		  option_follow_links; /* -L */
@@ -62,7 +61,7 @@ struct cpio {
 	struct archive	 *archive;
 	struct archive	 *archive_read_disk;
 	int		  argc;
-	char		**argv;
+	const char		**argv;
 	int		  return_value; /* Value returned by main() */
 	struct archive_entry_linkresolver *linkresolver;
 

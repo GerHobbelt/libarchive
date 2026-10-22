@@ -96,7 +96,7 @@ cpio_getopt(struct cpio *cpio)
 {
 	enum { state_start = 0, state_next_word, state_short, state_long };
 	static int state = state_start;
-	static char *opt_word;
+	static const char *opt_word;
 
 	const struct option *popt, *match, *match2;
 	const char *p, *long_prefix;

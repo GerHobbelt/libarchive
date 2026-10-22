@@ -2188,9 +2188,15 @@ assertion_umask(const char *file, int line, int mask)
 }
 
 /* Set times, report failures. */
+#if !defined(_WIN32) // suseconds_t ~ long ~ decltype(timeval::tv_nsec)
 int
 assertion_utimes(const char *file, int line, const char *pathname,
     time_t at, suseconds_t at_nsec, time_t mt, suseconds_t mt_nsec)
+#else
+int
+assertion_utimes(const char* file, int line, const char* pathname,
+	time_t at, long at_nsec, time_t mt, long mt_nsec)
+#endif
 {
 	int r;
 
@@ -3313,28 +3319,6 @@ copy_reference_file(const char *name)
 	fclose(in);
 }
 
-int
-is_LargeInode(const char *file)
-{
-#if defined(_WIN32) && !defined(__CYGWIN__)
-	BY_HANDLE_FILE_INFORMATION bhfi;
-	int r;
-
-	r = my_GetFileInformationByName(file, &bhfi);
-	if (r != 0)
-		return (0);
-	return (bhfi.nFileIndexHigh & 0x0000FFFFUL);
-#else
-	struct stat st;
-	int64_t ino;
-
-	if (stat(file, &st) < 0)
-		return (0);
-	ino = (int64_t)st.st_ino;
-	return (ino > 0xffffffff);
-#endif
-}
-
 void
 extract_reference_files(const char **names)
 {
@@ -3615,6 +3599,29 @@ set_environment(const char *key, const char *value)
 			fprintf(stderr, "setenv: %s\n", strerror(errno));
 	}
 #endif
+}
+
+int
+setCheckedLocale(const char *locale, const char *mbc, wchar_t expected_wc)
+{
+#ifdef HAVE_MBRTOWC
+	mbstate_t state;
+	size_t len;
+	wchar_t wc;
+#endif
+
+	if (setlocale(LC_ALL, locale) == NULL)
+		return (0);
+
+#ifdef HAVE_MBRTOWC
+	memset(&state, 0, sizeof(state));
+	len = strlen(mbc);
+	if (mbrtowc(&wc, mbc, len, &state) != len ||
+	    wc != expected_wc)
+		return (0);
+#endif
+
+	return (1);
 }
 
 /*
@@ -4048,8 +4055,12 @@ get_test_set(int *test_set, int limit, const char *test)
 	return ((idx == 0)?-1:idx);
 }
 
-int
-main(int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_test_util_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
 	static const int limit = nitems(tests);
 	int test_set[nitems(tests)];

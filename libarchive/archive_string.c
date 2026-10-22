@@ -710,7 +710,6 @@ static int
 archive_string_append_from_wcs_in_codepage(struct archive_string *as,
     const wchar_t *ws, size_t len, struct archive_string_conv *sc)
 {
-	BOOL defchar_used, *dp;
 	int ret = 0;
 	UINT to_cp;
 	size_t count, wslen = len;
@@ -732,12 +731,12 @@ archive_string_append_from_wcs_in_codepage(struct archive_string *as,
 			return (-1);
 		p = as->s + as->length;
 		count = 0;
-		defchar_used = 0;
 		while (count < wslen && *wp) {
 			if (*wp > 255) {
 				*p++ = '?';
 				wp++;
-				defchar_used = 1;
+				errno = EILSEQ;
+				ret = -1;
 			} else
 				*p++ = (char)*wp++;
 			count++;
@@ -750,7 +749,6 @@ archive_string_append_from_wcs_in_codepage(struct archive_string *as,
 			return (-1);
 		u16 = (uint16_t *)(as->s + as->length);
 		count = 0;
-		defchar_used = 0;
 		if (sc->flag & SCONV_TO_UTF16BE) {
 			while (count < len && *ws) {
 				archive_be16enc(u16+count, *ws);
@@ -772,6 +770,7 @@ archive_string_append_from_wcs_in_codepage(struct archive_string *as,
 			return (-1);
 		do {
 			int r;
+			BOOL defchar_used, *dp;
 
 			defchar_used = 0;
 			if (to_cp == CP_UTF8)
@@ -797,15 +796,17 @@ archive_string_append_from_wcs_in_codepage(struct archive_string *as,
 					return (-1);
 				continue;
 			}
-			if (r == 0)
+			if (r == 0 || defchar_used) {
+				errno = EILSEQ;
 				ret = -1;
+			}
 			count = (size_t)r;
 			break;
 		} while (1);
 	}
 	as->length += count;
 	as->s[as->length] = '\0';
-	return (defchar_used?-1:ret);
+	return (ret);
 }
 
 #elif defined(HAVE_WCTOMB) || defined(HAVE_WCRTOMB)
@@ -1320,17 +1321,7 @@ create_sconv_object(const char *fc, const char *tc,
 			else if (strcmp(fc, "CP932") == 0)
 				sc->cd = iconv_open(tc, "SJIS");
 		}
-#if defined(__FreeBSD__) && !defined(HAVE_LIBICONV)
-		/*
-		 * FreeBSD's native iconv() by default returns the number of
-		 * invalid characters in the input string, as specified by
-		 * POSIX, but iconv_strncat_in_locale() assumes GNU iconv
-		 * semantics.
-		 */
-		int v = 1;
-
-		(void)iconvctl(sc->cd, ICONV_SET_ILSEQ_INVALID, &v);
-#elif defined(_WIN32) && !defined(__CYGWIN__)
+#if defined(_WIN32) && !defined(__CYGWIN__)
 		/*
 		 * archive_mstring on Windows directly convert multi-bytes
 		 * into archive_wstring in order not to depend on locale
@@ -1597,9 +1588,15 @@ static struct {
 	unsigned ocp;
 	const char *locale;
 } acp_ocp_map[] = {
-	{  950,  950, "Chinese_Taiwan" },
+	{  950,  950, "Chinese_Hong Kong S.A.R." },
+	{  950,  950, "Chinese_Macau S.A.R." },
 	{  936,  936, "Chinese_People's Republic of China" },
+	{  936,  936, "Chinese (Simplified)_China" },
+	{  936,  936, "Chinese (Simplified)_People's Republic of China" },
 	{  950,  950, "Chinese_Taiwan" },
+	{  950,  950, "Chinese (Traditional)_Hong Kong SAR" },
+	{  950,  950, "Chinese (Traditional)_Macau SAR" },
+	{  950,  950, "Chinese (Traditional)_Taiwan" },
 	{ 1250,  852, "Czech_Czech Republic" },
 	{ 1252,  850, "Danish_Denmark" },
 	{ 1252,  850, "Dutch_Netherlands" },
@@ -1625,14 +1622,20 @@ static struct {
 	{ 1252,  850, "Italian_Switzerland" },
 	{  932,  932, "Japanese_Japan" },
 	{  949,  949, "Korean_Korea" },
+	{  949,  949, "Korean_South Korea" },
+	{  949,  949, "Korean (Unified)_Korea" },
+	{ 1252,  850, "Norwegian (Bokmål)_Norway" },
 	{ 1252,  850, "Norwegian (BokmOl)_Norway" },
-	{ 1252,  850, "Norwegian (BokmOl)_Norway" },
+	{ 1252,  850, "Norwegian (Nynorsk)_Norway" },
 	{ 1252,  850, "Norwegian-Nynorsk_Norway" },
 	{ 1250,  852, "Polish_Poland" },
-	{ 1252,  850, "Portuguese_Portugal" },
 	{ 1252,  850, "Portuguese_Brazil" },
+	{ 1252,  850, "Portuguese_Portugal" },
+	{ 1252,  850, "Portuguese (Brazil)_Brazil" },
+	{ 1252,  850, "Portuguese (Portugal)_Portugal" },
 	{ 1251,  866, "Russian_Russia" },
 	{ 1250,  852, "Slovak_Slovakia" },
+	{ 1250,  852, "Slovak_Slovak Republic" },
 	{ 1252,  850, "Spanish_Spain" },
 	{ 1252,  850, "Spanish_Mexico" },
 	{ 1252,  850, "Spanish_Spain" },
@@ -2130,8 +2133,16 @@ iconv_strncat_in_locale(struct archive_string *as, const void *_p,
 	while (remaining >= from_size) {
 		size_t result = iconv(cd, &itp, &remaining, &outp, &avail);
 
-		if (result != (size_t)-1)
+		if (result == 0)
 			break; /* Conversion completed. */
+		if (result != (size_t)-1) {
+			/*
+			 * Conversion did not fail, but it performed
+			 * some non-identical character substitutions.
+			 */
+			return_value = -1;
+			break;
+		}
 
 		if (errno == EILSEQ || errno == EINVAL) {
 			/*
@@ -2167,6 +2178,17 @@ iconv_strncat_in_locale(struct archive_string *as, const void *_p,
 				avail -= rbytes;
 			} else {
 				/* Skip the illegal input bytes. */
+				if (avail < 1) {
+					as->length = outp - as->s;
+					bs = as->buffer_length +
+					    (remaining * to_size) + 1;
+					if (NULL ==
+					    archive_string_ensure(as, bs))
+						return (-1);
+					outp = as->s + as->length;
+					avail = as->buffer_length
+					    - as->length - to_size;
+				}
 				*outp++ = '?';
 				avail--;
 			}

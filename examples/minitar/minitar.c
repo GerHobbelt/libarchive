@@ -48,7 +48,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if !defined(_MSC_VER)
 #include <unistd.h>
+#else
+#include <io.h>
+#include <stdint.h>
+
+#define mode_t unsigned short
+#define ssize_t int64_t
+#endif
+
+#if defined(BUILD_MONOLITHIC)
+#include "monolithic_examples.h"
+#endif
 
 /*
  * NO_CREATE implies NO_BZIP2_CREATE and NO_GZIP_CREATE and NO_COMPRESS_CREATE.
@@ -127,9 +139,14 @@ static void	usage(void);
 
 static int verbose = 0;
 
-int
-main(int argc, const char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      arch_minitar_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
+
 	const char *filename = NULL;
 	int compress, flags, mode, opt;
 

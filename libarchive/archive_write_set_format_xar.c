@@ -32,24 +32,15 @@
 #include <limits.h>
 #endif
 #include <stdlib.h>
-#if HAVE_LIBXML_XMLWRITER_H
-#include <libxml/xmlwriter.h>
-#if defined(LIBXML_VERSION) && LIBXML_VERSION >= 20703
-#define XAR_WRITER_HAS_XML
-#endif /* LIBXML_VERSION */
-#elif HAVE_XMLLITE_H
-#include <objidl.h>
-#include <initguid.h>
-#include <xmllite.h>
-#define XAR_WRITER_HAS_XML
-#endif
 #ifdef HAVE_BZLIB_H
 #include <bzlib.h>
 #endif
 #if HAVE_LZMA_H
 #include <lzma.h>
 #endif
-#ifdef HAVE_ZLIB_H
+#ifdef HAVE_ZLIB_NG_H
+#include <zlib-ng.h>
+#elif defined(HAVE_ZLIB_H)
 #include <zlib.h>
 #endif
 
@@ -62,6 +53,7 @@
 #include "archive_rb.h"
 #include "archive_string.h"
 #include "archive_write_private.h"
+#include "archive_xml_private.h"
 
 /*
  * Differences to xar utility.
@@ -78,9 +70,9 @@
  *
  */
 
-#if !defined(XAR_WRITER_HAS_XML) ||\
-	!defined(HAVE_ZLIB_H) || \
-	!defined(ARCHIVE_HAS_MD5) || !defined(ARCHIVE_HAS_SHA1)
+#if !defined(ARCHIVE_XML_WRITE) ||\
+    !defined(HAVE_ZLIB_H) || \
+    !defined(ARCHIVE_HAS_MD5) || !defined(ARCHIVE_HAS_SHA1)
 /*
  * xar needs several external libraries.
  *   o libxml2 or xmllite (on Windows)
@@ -561,8 +553,11 @@ xar_options(struct archive_write *a, const char *key, const char *value)
 		char *endptr;
 		unsigned long val;
 
-		if (value == NULL)
+		if (value == NULL) {
+			archive_set_error(&(a->archive), ARCHIVE_ERRNO_MISC,
+			    "Option 'threads' requires an argument");
 			return (ARCHIVE_FAILED);
+		}
 		errno = 0;
 		val = strtoul(value, &endptr, 10);
 		if (errno != 0 || *endptr != '\0' || val > (unsigned)INT_MAX) {
@@ -581,6 +576,7 @@ xar_options(struct archive_write *a, const char *key, const char *value)
 			xar->opt_threads = 1;
 #endif
 		}
+		return (ARCHIVE_OK);
 	}
 
 	/* Note: The "warn" return is just to inform the options
@@ -2759,7 +2755,7 @@ static int
 compression_init_encoder_gzip(struct archive *a,
     struct la_zstream *lastrm, int level, int withheader)
 {
-	z_stream *strm;
+	zng_stream *strm;
 
 	if (lastrm->valid)
 		compression_end(a, lastrm);
@@ -2778,7 +2774,7 @@ compression_init_encoder_gzip(struct archive *a,
 	strm->next_out = lastrm->next_out;
 	strm->avail_out = (uInt)lastrm->avail_out;
 	strm->total_out = (uLong)lastrm->total_out;
-	if (deflateInit2(strm, level, Z_DEFLATED,
+	if (zng_deflateInit2(strm, level, Z_DEFLATED,
 	    (withheader)?15:-15,
 	    8, Z_DEFAULT_STRATEGY) != Z_OK) {
 		free(strm);
@@ -2798,10 +2794,10 @@ static int
 compression_code_gzip(struct archive *a,
     struct la_zstream *lastrm, enum la_zaction action)
 {
-	z_stream *strm;
+	zng_stream *strm;
 	int r;
 
-	strm = (z_stream *)lastrm->real_stream;
+	strm = (zng_stream *)lastrm->real_stream;
 	/* zlib.h is not const-correct, so we need this one bit
 	 * of ugly hackery to convert a const * pointer to
 	 * a non-const pointer. */
@@ -2811,7 +2807,7 @@ compression_code_gzip(struct archive *a,
 	strm->next_out = lastrm->next_out;
 	strm->avail_out = (uInt)lastrm->avail_out;
 	strm->total_out = (uLong)lastrm->total_out;
-	r = deflate(strm,
+	r = zng_deflate(strm,
 	    (action == ARCHIVE_Z_FINISH)? Z_FINISH: Z_NO_FLUSH);
 	lastrm->next_in = strm->next_in;
 	lastrm->avail_in = strm->avail_in;
@@ -2835,11 +2831,11 @@ compression_code_gzip(struct archive *a,
 static int
 compression_end_gzip(struct archive *a, struct la_zstream *lastrm)
 {
-	z_stream *strm;
+	zng_stream *strm;
 	int r;
 
-	strm = (z_stream *)lastrm->real_stream;
-	r = deflateEnd(strm);
+	strm = (zng_stream *)lastrm->real_stream;
+	r = zng_deflateEnd(strm);
 	free(strm);
 	lastrm->real_stream = NULL;
 	lastrm->valid = 0;
@@ -3389,7 +3385,7 @@ getalgname(enum sumalg sumalg)
 	}
 }
 
-#if HAVE_LIBXML_XMLWRITER_H
+#if defined(ARCHIVE_XML_WRITER_XML2)
 
 #define BAD_CAST_CONST (const xmlChar *)
 
@@ -3517,7 +3513,7 @@ xml_writer_get_final_content_and_length(struct xml_writer *ctx,
 	return (0);
 }
 
-#elif HAVE_XMLLITE_H
+#elif defined(ARCHIVE_XML_WRITER_XMLLITE)
 
 struct xml_writer {
 	IXmlWriter *writer;
@@ -3775,7 +3771,9 @@ xml_writer_get_final_content_and_length(struct xml_writer *ctx,
 
 	*out = (const char *)GlobalLock(gbl);
 	if (*out == NULL) {
-		hr = HRESULT_FROM_WIN32(GetLastError());
+		DWORD e = GetLastError();
+
+		hr = (e == ERROR_SUCCESS) ? E_FAIL : HRESULT_FROM_WIN32(e);
 		return (hr);
 	}
 
@@ -3787,6 +3785,6 @@ xml_writer_get_final_content_and_length(struct xml_writer *ctx,
 	return (hr);
 }
 
-#endif /* HAVE_LIBXML_XMLWRITER_H */
+#endif /* ARCHIVE_XML_WRITER_XML2 */
 
 #endif /* Support xar format */
