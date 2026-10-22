@@ -459,7 +459,7 @@ archive_compressor_zstd_close(struct archive_write_filter *f)
 
 	if (zstd->state == running)
 		zstd->state = finishing;
-	if ((ret = drive_compressor(f, data, 1, NULL, 0)) != ARCHIVE_OK)
+	if ((ret = drive_compressor(f, zstd, 1, NULL, 0)) != ARCHIVE_OK)
 		return (ret);
 #ifdef ZSTD_MAGIC_SKIPPABLE_START
 #define ZSTD_SKIPHDRLEN 8
