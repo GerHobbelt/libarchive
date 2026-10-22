@@ -62,6 +62,7 @@
 #endif
 
 #include "archive_endian.h"
+#include "archive_integer.h"
 #include "archive_private.h"
 #include "archive_string.h"
 #include "archive_string_composition.h"
@@ -318,9 +319,8 @@ archive_string_ensure(struct archive_string *as, size_t s)
 		new_length = as->buffer_length + as->buffer_length;
 	else {
 		/* Buffers 8k and over grow by at least 25% each time. */
-		new_length = as->buffer_length + as->buffer_length / 4;
-		/* Be safe: If size wraps, fail. */
-		if (new_length < as->buffer_length) {
+		if (archive_ckd_add_size(&new_length,
+		    as->buffer_length, as->buffer_length / 4)) {
 			/* On failure, wipe the string and return NULL. */
 			archive_string_free(as);
 			errno = ENOMEM;/* Make sure errno has ENOMEM. */
@@ -2130,8 +2130,16 @@ iconv_strncat_in_locale(struct archive_string *as, const void *_p,
 	while (remaining >= from_size) {
 		size_t result = iconv(cd, &itp, &remaining, &outp, &avail);
 
-		if (result != (size_t)-1)
+		if (result == 0)
 			break; /* Conversion completed. */
+		if (result != (size_t)-1) {
+			/*
+			 * Conversion did not fail, but it performed
+			 * some non-identical character substitutions.
+			 */
+			return_value = -1;
+			break;
+		}
 
 		if (errno == EILSEQ || errno == EINVAL) {
 			/*

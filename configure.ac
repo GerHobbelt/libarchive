@@ -379,7 +379,8 @@ AC_CHECK_HEADERS(m4_flatten([
 	sys/acl.h sys/cdefs.h sys/ea.h sys/extattr.h
 	sys/ioctl.h sys/mkdev.h sys/mount.h
 	sys/param.h sys/poll.h sys/richacl.h
-	sys/select.h sys/statfs.h sys/statvfs.h sys/sysctl.h
+	sys/select.h sys/single_threaded.h
+	sys/statfs.h sys/statvfs.h sys/sysctl.h
 	sys/sysmacros.h sys/time.h sys/utime.h sys/utsname.h
 	sys/vfs.h sys/xattr.h time.h unistd.h utime.h wchar.h
 	wctype.h
@@ -552,7 +553,7 @@ if test "x$with_lzo2" = "xyes"; then
 fi
 
 AC_ARG_WITH([cng],
-  AS_HELP_STRING([--without-cng], [Don't build support of CNG(Crypto Next Generation)]))
+  AS_HELP_STRING([--without-cng], [Don't build with crypto support from Windows CNG (Crypto Next Generation)]))
 
 AC_ARG_WITH([mbedtls],
   AS_HELP_STRING([--with-mbedtls], [Build with crypto support from mbed TLS]))
@@ -560,6 +561,8 @@ AC_ARG_WITH([nettle],
   AS_HELP_STRING([--with-nettle], [Build with crypto support from Nettle]))
 AC_ARG_WITH([openssl],
   AS_HELP_STRING([--without-openssl], [Don't build support for mtree and xar hashes through openssl]))
+AC_ARG_WITH([md],
+  AS_HELP_STRING([--without-md], [Don't build with crypto support from Message Digest]))
 case "$host_os" in
   *darwin* ) with_openssl=no ;;
 esac
@@ -853,7 +856,7 @@ AC_CHECK_FUNCS(m4_flatten([
 	tcgetattr tcsetattr timegm tzset
 	unlinkat unsetenv utime utimensat utimes
 	vfork
-	wcrtomb wcscmp wcscpy wcslen wctomb wmemcmp wmemcpy wmemmove
+	waitpid wcrtomb wcscmp wcscpy wcslen wctomb wmemcmp wmemcpy wmemmove
 	_fseeki64 _get_timezone
 ]))
 AC_CHECK_DECL([ctime_s],
@@ -1275,32 +1278,6 @@ main(int argc, char **argv)
   fi
 ])
 
-AC_DEFUN([CRYPTO_CHECK_WIN], [
-  if test "$found_$1" != yes; then
-    AC_MSG_CHECKING([support for ARCHIVE_CRYPTO_$1_WIN])
-    AC_LINK_IFELSE([AC_LANG_SOURCE([
-#define ARCHIVE_$1_COMPILE_TEST
-#include <windows.h>
-#include <wincrypt.h>
-
-int
-main(int argc, char **argv)
-{
-	(void)argc;
-	(void)argv;
-
-	return ($2);
-}
-])],
-    [ AC_MSG_RESULT([yes])
-      found_$1=yes
-      found_WIN=yes
-      AC_DEFINE(ARCHIVE_CRYPTO_$1_WIN, 1, [ $1 via ARCHIVE_CRYPTO_$1_WIN supported.])
-    ],
-    [ AC_MSG_RESULT([no])])
-  fi
-])
-
 case "$host_os" in
   *mingw* | *cygwin* | *msys*)
 	;;
@@ -1327,15 +1304,34 @@ case "$host_os" in
 	;;
 esac
 
-if test "x$with_cng" != "xno"; then
-    AC_CHECK_HEADERS([bcrypt.h],[
-        LIBS="$LIBS -lbcrypt"
-    ],[],
-    [[#ifdef HAVE_WINDOWS_H
-    # include <windows.h>
-    #endif
-    ]])
-fi
+AC_CHECK_HEADERS([bcrypt.h],[
+    LIBS="$LIBS -lbcrypt"
+    if test "x$with_cng" != "xno"; then
+	dnl bcrypt supports these algorithms on all available versions
+        found_WIN=yes
+        found_MD5=yes
+        found_SHA1=yes
+        found_SHA256=yes
+        found_SHA384=yes
+        found_SHA512=yes
+        AC_DEFINE(ARCHIVE_CRYPTO_WIN, 1,
+	    [ Use Windows CNG (Crypto Next Generation)])
+        AC_DEFINE(ARCHIVE_CRYPTO_MD5_WIN, 1,
+	    [ MD5 via ARCHIVE_CRYPTO_MD5_WIN supported.])
+        AC_DEFINE(ARCHIVE_CRYPTO_SHA1_WIN, 1,
+	    [ SHA1 via ARCHIVE_CRYPTO_SHA1_WIN supported.])
+        AC_DEFINE(ARCHIVE_CRYPTO_SHA256_WIN, 1,
+	    [ SHA256 via ARCHIVE_CRYPTO_SHA256_WIN supported.])
+        AC_DEFINE(ARCHIVE_CRYPTO_SHA384_WIN, 1,
+	    [ SHA384 via ARCHIVE_CRYPTO_SHA384_WIN supported.])
+        AC_DEFINE(ARCHIVE_CRYPTO_SHA512_WIN, 1,
+	    [ SHA512 via ARCHIVE_CRYPTO_SHA512_WIN supported.])
+    fi
+],[],
+[[#ifdef HAVE_WINDOWS_H
+# include <windows.h>
+#endif
+]])
 
 if test "x$with_mbedtls" = "xyes"; then
     AC_CHECK_HEADERS([mbedtls/aes.h mbedtls/md.h mbedtls/pkcs5.h])
@@ -1355,6 +1351,7 @@ fi
 
 if test "x$with_nettle" = "xyes"; then
     AC_CHECK_HEADERS([nettle/md5.h nettle/ripemd160.h nettle/sha.h])
+    AC_CHECK_HEADERS([nettle/sha1.h nettle/sha2.h])
     AC_CHECK_HEADERS([nettle/pbkdf2.h nettle/aes.h nettle/hmac.h])
     AC_CHECK_HEADERS([nettle/version.h])
     saved_LIBS=$LIBS
@@ -1372,7 +1369,6 @@ fi
 
 if test "x$with_openssl" != "xno"; then
     AC_CHECK_HEADERS([openssl/evp.h openssl/opensslv.h])
-    saved_LIBS=$LIBS
     LIBSREQUIRED="$LIBSREQUIRED${LIBSREQUIRED:+ }libcrypto"
     AC_CHECK_LIB(crypto,OPENSSL_config)
     CRYPTO_CHECK(MD5, OPENSSL, md5)
@@ -1386,28 +1382,20 @@ fi
 
 AC_SUBST(LIBSREQUIRED)
 
-dnl Probe libmd AFTER OpenSSL/libcrypto.
-dnl The two are incompatible and OpenSSL is more complete.
-saved_LIBS=$LIBS
-AC_CHECK_LIB(md, MD5Init)
-CRYPTO_CHECK(MD5, LIBMD, md5)
-CRYPTO_CHECK(RMD160, LIBMD, rmd160)
-CRYPTO_CHECK(SHA1, LIBMD, sha1)
-CRYPTO_CHECK(SHA256, LIBMD, sha256)
-CRYPTO_CHECK(SHA512, LIBMD, sha512)
-if test "x$found_LIBMD" != "xyes"; then
-  LIBS=$saved_LIBS
+if test "x$with_md" != "xno"; then
+    dnl Probe libmd AFTER OpenSSL/libcrypto.
+    dnl The two are incompatible and OpenSSL is more complete.
+    saved_LIBS=$LIBS
+    AC_CHECK_LIB(md, MD5Init)
+    CRYPTO_CHECK(MD5, LIBMD, md5)
+    CRYPTO_CHECK(RMD160, LIBMD, rmd160)
+    CRYPTO_CHECK(SHA1, LIBMD, sha1)
+    CRYPTO_CHECK(SHA256, LIBMD, sha256)
+    CRYPTO_CHECK(SHA512, LIBMD, sha512)
+    if test "x$found_LIBMD" != "xyes"; then
+      LIBS=$saved_LIBS
+    fi
 fi
-
-case "$host_os" in
-  *mingw* | *cygwin* | *msys*)
-	CRYPTO_CHECK_WIN(MD5, CALG_MD5)
-	CRYPTO_CHECK_WIN(SHA1, CALG_SHA1)
-	CRYPTO_CHECK_WIN(SHA256, CALG_SHA_256)
-	CRYPTO_CHECK_WIN(SHA384, CALG_SHA_384)
-	CRYPTO_CHECK_WIN(SHA512, CALG_SHA_512)
-	;;
-esac
 
 dnl Visibility annotations...
 gl_VISIBILITY

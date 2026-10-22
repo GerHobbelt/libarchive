@@ -91,6 +91,8 @@ IF(ENABLE_TEST)
     test_open_filename.c
     test_pax_filename_encoding.c
     test_pax_xattr_header.c
+    test_read_data_block_offset_at_eof.c
+    test_read_data_into_fd_no_offset_reported.c
     test_read_data_into_fd_size_exceeds_declared.c
     test_read_data_large.c
     test_read_disk.c
@@ -173,6 +175,7 @@ IF(ENABLE_TEST)
     test_read_format_isorr_new_compress.c
     test_read_format_isorr_rr_moved.c
     test_read_format_isozisofs_compress.c
+    test_read_format_iso_rockridge_ce_overflow.c
     test_read_format_iso_rockridge_zf_overflow.c
     test_read_format_iso_zisofs_overflow.c
     test_read_format_lha.c

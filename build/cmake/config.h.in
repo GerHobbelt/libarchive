@@ -336,6 +336,9 @@ typedef uint64_t uintmax_t;
 /* SHA512 via ARCHIVE_CRYPTO_SHA512_WIN supported. */
 #cmakedefine ARCHIVE_CRYPTO_SHA512_WIN 1
 
+/* Use Windows CNG(Crypto Next Generation) */
+#cmakedefine ARCHIVE_CRYPTO_WIN 1
+
 /* AIX xattr support */
 #cmakedefine ARCHIVE_XATTR_AIX 1
 
@@ -952,6 +955,12 @@ typedef uint64_t uintmax_t;
 /* Define to 1 if you have the <nettle/sha.h> header file. */
 #cmakedefine HAVE_NETTLE_SHA_H 1
 
+/* Define to 1 if you have the <nettle/sha1.h> header file. */
+#cmakedefine HAVE_NETTLE_SHA1_H 1
+
+/* Define to 1 if you have the <nettle/sha2.h> header file. */
+#cmakedefine HAVE_NETTLE_SHA2_H 1
+
 /* Define to 1 if you have the <nettle/version.h> header file. */
 #cmakedefine HAVE_NETTLE_VERSION_H 1
 
@@ -1183,6 +1192,9 @@ typedef uint64_t uintmax_t;
 /* Define to 1 if you have the <sys/select.h> header file. */
 #cmakedefine HAVE_SYS_SELECT_H 1
 
+/* Define to 1 if you have the <sys/single_threaded.h> header file. */
+#cmakedefine HAVE_SYS_SINGLE_THREADED_H 1
+
 /* Define to 1 if you have the <sys/statfs.h> header file. */
 #cmakedefine HAVE_SYS_STATFS_H 1
 
@@ -1263,6 +1275,9 @@ typedef uint64_t uintmax_t;
 
 /* Define to 1 if you have the 'vprintf' function. */
 #cmakedefine HAVE_VPRINTF 1
+
+/* Define to 1 if you have the 'waitpid' function. */
+#cmakedefine HAVE_WAITPID 1
 
 /* Define to 1 if you have the <wchar.h> header file. */
 #cmakedefine HAVE_WCHAR_H 1
