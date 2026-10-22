@@ -417,6 +417,10 @@ int main(int argc, const char** argv)
 			else
 				cpio->format = "cpio";
 		}
+		if (cpio->argc > 0)
+			lafe_errc(1, 0,
+			    "Too many arguments for -o mode (got %d, expected 0)",
+			    cpio->argc);
 		mode_out(cpio);
 		break;
 	case 'i':
@@ -437,6 +441,10 @@ int main(int argc, const char** argv)
 		if (*cpio->argv == NULL || **cpio->argv == '\0')
 			lafe_errc(1, 0,
 			    "-p mode requires a target directory");
+		if (cpio->argc > 1)
+			lafe_errc(1, 0,
+			    "Too many arguments for -p mode (got %d, expected 1)",
+			    cpio->argc);
 		mode_pass(cpio, *cpio->argv);
 		break;
 	default:
@@ -736,12 +744,16 @@ file_to_archive(struct cpio *cpio, const char *srcpath)
 		return (r);
 	}
 
-	if (cpio->uid_override >= 0)
+	if (cpio->uid_override >= 0) {
 		archive_entry_set_uid(entry, cpio->uid_override);
+		archive_entry_set_uname(entry, NULL);
+	}
 	if (cpio->uname_override != NULL)
 		archive_entry_set_uname(entry, cpio->uname_override);
-	if (cpio->gid_override >= 0)
+	if (cpio->gid_override >= 0) {
 		archive_entry_set_gid(entry, cpio->gid_override);
+		archive_entry_set_gname(entry, NULL);
+	}
 	if (cpio->gname_override != NULL)
 		archive_entry_set_gname(entry, cpio->gname_override);
 

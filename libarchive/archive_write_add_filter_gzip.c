@@ -224,7 +224,7 @@ archive_compressor_gzip_open(struct archive_write_filter *f)
 		}
 	}
 
-	gzip->crc = zng_crc32(0L, NULL, 0);
+	gzip->crc = __archive_crc32(0L, NULL, 0);
 	gzip->stream.next_out = gzip->compressed;
 	gzip->stream.avail_out = (uInt)gzip->compressed_buffer_size;
 
@@ -324,7 +324,7 @@ archive_compressor_gzip_write(struct archive_write_filter *f, const void *buff,
 	int ret;
 
 	/* Update statistics */
-	gzip->crc = zng_crc32(gzip->crc, (const Bytef *)buff, (uInt)length);
+	gzip->crc = __archive_crc32(gzip->crc, (const Bytef *)buff, (uInt)length);
 	gzip->total_in += length;
 
 	/* Compress input data to output buffer */

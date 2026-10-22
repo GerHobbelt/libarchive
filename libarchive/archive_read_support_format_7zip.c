@@ -62,9 +62,7 @@
 #include "archive_time_private.h"
 #include "archive_endian.h"
 
-#ifndef HAVE_ZLIB_H
-#include "archive_crc32.h"
-#endif
+
 
 #define _7ZIP_SIGNATURE	"7z\xBC\xAF\x27\x1C"
 #define SFX_MIN_ADDR	0x7000
@@ -531,11 +529,11 @@ archive_read_format_7zip_has_encrypted_entries(struct archive_read *a)
 static int
 get_data_offset(struct archive_read *a, int64_t *data_offset, int compat)
 {
-	const unsigned char *p;
+	const unsigned char *h;
 	int64_t offset, sfx_offset;
 	int r, window;
 
-	if ((p = __archive_read_ahead(a, 6, NULL)) == NULL) {
+	if ((h = __archive_read_ahead(a, 6, NULL)) == NULL) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
 		    "Truncated 7-Zip file body");
 		return (ARCHIVE_FATAL);
@@ -543,7 +541,7 @@ get_data_offset(struct archive_read *a, int64_t *data_offset, int compat)
 
 	/* If first six bytes are the 7-Zip signature,
 	 * return the offset right now. */
-	if (memcmp(p, _7ZIP_SIGNATURE, 6) == 0) {
+	if (memcmp(h, _7ZIP_SIGNATURE, 6) == 0) {
 		*data_offset = 0;
 		return (ARCHIVE_OK);
 	}
@@ -556,9 +554,9 @@ get_data_offset(struct archive_read *a, int64_t *data_offset, int compat)
 	 * performing a seek, get_elf_sfx_offset requires one,
 	 * thus a performance difference between the two is expected. 
 	 */
-	if ((p[0] == 'M' && p[1] == 'Z'))
+	if ((h[0] == 'M' && h[1] == 'Z'))
 		r = get_pe_sfx_offset(a, &sfx_offset);
-	else if (memcmp(p, "\x7F\x45LF", 4) == 0)
+	else if (memcmp(h, "\x7F\x45LF", 4) == 0)
 		r = get_elf_sfx_offset(a, &sfx_offset, compat);
 	else
 		r = ARCHIVE_FATAL;
@@ -567,27 +565,29 @@ get_data_offset(struct archive_read *a, int64_t *data_offset, int compat)
 
 	offset = sfx_offset;
 	window = 4096;
-	while (offset + window <= (sfx_offset + SFX_MAX_OFFSET)) {
+#define SFX_MAX_READAHEAD	(sfx_offset + SFX_MAX_OFFSET)
+	while (offset + window <= SFX_MAX_READAHEAD) {
 		ssize_t bytes_avail;
-		const unsigned char *buff = __archive_read_ahead(a,
-				offset + window, &bytes_avail);
-		if (buff == NULL) {
-			/* Remaining bytes are less than window. */
-			window >>= 1;
-			if (window < 0x40)
-				goto fail;
-			continue;
+
+		h = __archive_read_ahead(a, offset + window, &bytes_avail);
+		if (h == NULL) {
+			if (bytes_avail >= offset + 32) {
+				/* Remaining bytes are less than window. */
+				window = bytes_avail - offset;
+				continue;
+			}
+			goto fail;
 		}
-		p = buff + offset;
-		while (buff + bytes_avail - p >= 32) {
-			size_t step = check_7zip_header_in_sfx(p);
+		if (bytes_avail > SFX_MAX_READAHEAD)
+			bytes_avail = SFX_MAX_READAHEAD;
+		while (offset <= bytes_avail - 32) {
+			size_t step = check_7zip_header_in_sfx(h + offset);
 			if (step == 0) {
-				*data_offset = p - buff;
+				*data_offset = offset;
 				return (ARCHIVE_OK);
 			}
-			p += step;
+			offset += step;
 		}
-		offset = p - buff;
 	}
 fail:
 	archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
@@ -600,9 +600,9 @@ archive_read_format_7zip_bid(struct archive_read *a, int best_bid)
 {
 	int64_t data_offset;
 
-	/* If someone has already bid more than 32, then avoid
+	/* If someone has already bid more than 48, then avoid
 	   trashing the look-ahead buffers with a seek. */
-	if (best_bid > 32)
+	if (best_bid > 48)
 		return (-1);
 
 	if (get_data_offset(a, &data_offset, 0) < 0)
@@ -623,7 +623,7 @@ check_7zip_header_in_sfx(const unsigned char *p)
 		 * Magic Code, so we should do this in order not to
 		 * make a mis-detection.
 		 */
-		if (zng_crc32(0, p + 12, 20) != archive_le32dec(p + 8))
+		if (__archive_crc32(0, p + 12, 20) != archive_le32dec(p + 8))
 			return (6);
 		/* Hit the header! */
 		return (0);
@@ -1135,7 +1135,7 @@ archive_read_format_7zip_read_data(struct archive_read *a,
 
 	/* Update checksum */
 	if ((zip->entry->flg & CRC32_IS_SET) && bytes)
-		zip->entry_crc32 = zng_crc32(zip->entry_crc32, *buff,
+		zip->entry_crc32 = __archive_crc32(zip->entry_crc32, *buff,
 		    (unsigned)bytes);
 
 	/* If we hit the end, swallow any end-of-data marker. */
@@ -1302,6 +1302,15 @@ ppmd_read(void *p)
 		 * and we are on boundary;
 		 * last resort to read using __archive_read_ahead.
 		 */
+		if (zip->pack_stream_inbytes_remaining <= 0 ||
+		    zip->ppstream.stream_in >=
+		    (uint64_t)zip->pack_stream_inbytes_remaining) {
+			archive_set_error(&a->archive,
+			    ARCHIVE_ERRNO_FILE_FORMAT,
+			    "Truncated 7z file data");
+			zip->ppstream.overconsumed = 1;
+			return (0);
+		}
 		const uint8_t *data = __archive_read_ahead(a,
 		    zip->ppstream.stream_in + 1, NULL);
 		if (data == NULL) {
@@ -1939,7 +1948,10 @@ decompress(struct archive_read *a, struct _7zip *zip,
 	if (ret != ARCHIVE_OK && ret != ARCHIVE_EOF)
 		return (ret);
 
-	*used = o_avail_in - t_avail_in;
+	if (zip->codec == _7Z_PPMD)
+		*used = zip->ppstream.stream_in;
+	else
+		*used = o_avail_in - t_avail_in;
 	*outbytes = o_avail_out - t_avail_out;
 
 	/*
@@ -3176,19 +3188,19 @@ read_Times(struct archive_read *a, int type)
 			goto failed;
 		switch (type) {
 		case kCTime:
-			ntfs_to_unix(archive_le64dec(p),
+			__archive_ntfs_to_unix(archive_le64dec(p),
 			    &(entries[i].ctime),
 			    &(entries[i].ctime_ns));
 			entries[i].flg |= CTIME_IS_SET;
 			break;
 		case kATime:
-			ntfs_to_unix(archive_le64dec(p),
+			__archive_ntfs_to_unix(archive_le64dec(p),
 			    &(entries[i].atime),
 			    &(entries[i].atime_ns));
 			entries[i].flg |= ATIME_IS_SET;
 			break;
 		case kMTime:
-			ntfs_to_unix(archive_le64dec(p),
+			__archive_ntfs_to_unix(archive_le64dec(p),
 			    &(entries[i].mtime),
 			    &(entries[i].mtime_ns));
 			entries[i].flg |= MTIME_IS_SET;
@@ -3267,7 +3279,7 @@ header_bytes(struct archive_read *a, size_t rbytes)
 	}
 
 	/* Update checksum */
-	zip->header_crc32 = zng_crc32(zip->header_crc32, p, (unsigned)rbytes);
+	zip->header_crc32 = __archive_crc32(zip->header_crc32, p, (unsigned)rbytes);
 	return (p);
 }
 
@@ -3306,7 +3318,7 @@ slurp_central_directory(struct archive_read *a, struct _7zip *zip,
 	}
 
 	/* CRC check. */
-	if (zng_crc32(0, p + 12, 20)
+	if (__archive_crc32(0, p + 12, 20)
 	    != archive_le32dec(p + 8)) {
 #ifndef DONT_FAIL_ON_CRC_ERROR
 		archive_set_error(&a->archive, -1, "Header CRC error");

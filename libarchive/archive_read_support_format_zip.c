@@ -45,6 +45,9 @@
 #ifdef HAVE_ERRNO_H
 #include <errno.h>
 #endif
+#ifdef HAVE_LIMITS_H
+#include <limits.h>
+#endif
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -75,10 +78,6 @@
 #include "archive_read_private.h"
 #include "archive_time_private.h"
 #include "archive_ppmd8_private.h"
-
-#ifndef HAVE_ZLIB_H
-#include "archive_crc32.h"
-#endif
 
 #ifdef HAVE_LIBNATSPEC
 #include <natspec.h>
@@ -343,7 +342,7 @@ static void
 trad_enc_update_keys(struct trad_enc_ctx *ctx, uint8_t c)
 {
 	uint8_t t;
-#define CRC32(c, b) (zng_crc32(c ^ 0xffffffffUL, &b, 1) ^ 0xffffffffUL)
+#define CRC32(c, b) (__archive_crc32(c ^ 0xffffffffUL, &b, 1) ^ 0xffffffffUL)
 
 	ctx->keys[0] = CRC32(ctx->keys[0], c);
 	ctx->keys[1] = (ctx->keys[1] + (ctx->keys[0] & 0xff)) * 134775813L + 1;
@@ -592,7 +591,7 @@ zip_read_decrypt_update(struct zip *zip, ssize_t to_consume, const void *sp)
 static unsigned long
 real_crc32(unsigned long crc, const void *buff, size_t len)
 {
-	return zng_crc32(crc, buff, (unsigned int)len);
+	return __archive_crc32(crc, buff, (unsigned int)len);
 }
 
 /* Used by "ignorecrc32" option to speed up tests. */
@@ -1161,7 +1160,7 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 	}
 	zip->init_decryption = (zip_entry->zip_flags & ZIP_ENCRYPTED);
 	zip_entry->compression = (char)archive_le16dec(p + 8);
-	zip_entry->mtime = dos_to_unix(archive_le32dec(p + 10));
+	zip_entry->mtime = __archive_dos_to_unix(archive_le32dec(p + 10));
 	zip_entry->crc32 = archive_le32dec(p + 14);
 	if (zip_entry->zip_flags & ZIP_LENGTH_AT_END)
 		zip_entry->decdat = p[11];
@@ -2643,7 +2642,7 @@ zip_read_data_zipx_bzip2(struct archive_read *a, const void **buff,
     size_t *size, int64_t *offset)
 {
 	struct zip *zip = a->format->data;
-	ssize_t bytes_avail = 0, to_consume;
+	ssize_t bytes_avail = 0, max_in, to_consume;
 	const void *compressed_buff;
 	const void *sp;
 	int r;
@@ -2678,7 +2677,14 @@ zip_read_data_zipx_bzip2(struct archive_read *a, const void **buff,
 	zip_read_decrypt(zip, compressed_buff, bytes_avail,
 	    &compressed_buff, &bytes_avail, &sp);
 
-	/* Setup buffer boundaries. */
+	/* Setup buffer boundaries.  bzstream.avail_in is 32 bits wide,
+	 * so clamp the available byte count before the assignment. */
+	if (UINT_MAX >= SSIZE_MAX)
+		max_in = SSIZE_MAX;
+	else
+		max_in = UINT_MAX;
+	if (bytes_avail > max_in)
+		bytes_avail = max_in;
 	zip->bzstream.next_in = (char*)(uintptr_t) compressed_buff;
 	zip->bzstream.avail_in = (uint32_t)bytes_avail;
 	zip->bzstream.total_in_hi32 = 0;
@@ -2917,7 +2923,7 @@ zip_read_data_deflate(struct archive_read *a, const void **buff,
     size_t *size, int64_t *offset)
 {
 	struct zip *zip = a->format->data;
-	ssize_t bytes_avail, to_consume = 0;
+	ssize_t bytes_avail, max_in, to_consume = 0;
 	const void *compressed_buff;
 	const void *sp;
 	int r;
@@ -2960,6 +2966,16 @@ zip_read_data_deflate(struct archive_read *a, const void **buff,
 
 	zip_read_decrypt(zip, compressed_buff, bytes_avail,
 					 &compressed_buff, &bytes_avail, &sp);
+
+	/* stream.avail_in is a uInt, which is 32 bits wide even where
+	 * ssize_t is 64 bits.  Clamp the available byte count so that a
+	 * read-ahead window larger than 4 GiB is not truncated. */
+	if (UINT_MAX >= SSIZE_MAX)
+		max_in = SSIZE_MAX;
+	else
+		max_in = UINT_MAX;
+	if (bytes_avail > max_in)
+		bytes_avail = max_in;
 
 	/*
 	 * A bug in zlib.h: stream.next_in should be marked 'const'
@@ -3685,11 +3701,11 @@ archive_read_support_format_zip_capabilities_streamable(struct archive_read * a)
 static int
 archive_read_format_zip_streamable_bid(struct archive_read *a, int best_bid)
 {
-	const char *p;
+	const char *h;
 
 	(void)best_bid; /* UNUSED */
 
-	if ((p = __archive_read_ahead(a, 4, NULL)) == NULL)
+	if ((h = __archive_read_ahead(a, 4, NULL)) == NULL)
 		return (-1);
 
 	/*
@@ -3700,13 +3716,13 @@ archive_read_format_zip_streamable_bid(struct archive_read *a, int best_bid)
 	 *
 	 * So we've effectively verified ~29 total bits of check data.
 	 */
-	if (p[0] == 'P' && p[1] == 'K') {
-		if ((p[2] == '\001' && p[3] == '\002')
-		    || (p[2] == '\003' && p[3] == '\004')
-		    || (p[2] == '\005' && p[3] == '\006')
-		    || (p[2] == '\006' && p[3] == '\006')
-		    || (p[2] == '\007' && p[3] == '\010')
-		    || (p[2] == '0' && p[3] == '0'))
+	if (h[0] == 'P' && h[1] == 'K') {
+		if ((h[2] == '\001' && h[3] == '\002')
+		    || (h[2] == '\003' && h[3] == '\004')
+		    || (h[2] == '\005' && h[3] == '\006')
+		    || (h[2] == '\006' && h[3] == '\006')
+		    || (h[2] == '\007' && h[3] == '\010')
+		    || (h[2] == '0' && h[3] == '0'))
 			return (29);
 	}
 
@@ -4058,7 +4074,7 @@ archive_read_format_zip_seekable_bid(struct archive_read *a, int best_bid)
 {
 	struct zip *zip = a->format->data;
 	int64_t file_size, current_offset;
-	const char *p;
+	const char *h;
 	int i, tail;
 
 	/* If someone has already bid more than 32, then avoid
@@ -4076,22 +4092,22 @@ archive_read_format_zip_seekable_bid(struct archive_read *a, int best_bid)
 	current_offset = __archive_read_seek(a, -tail, SEEK_END);
 	if (current_offset < 0)
 		return 0;
-	if ((p = __archive_read_ahead(a, (size_t)tail, NULL)) == NULL)
+	if ((h = __archive_read_ahead(a, (size_t)tail, NULL)) == NULL)
 		return 0;
 	/* Boyer-Moore search backwards from the end, since we want
 	 * to match the last EOCD in the file (there can be more than
 	 * one if there is an uncompressed Zip archive as a member
 	 * within this Zip archive). */
 	for (i = tail - 22; i > 0;) {
-		switch (p[i]) {
+		switch (h[i]) {
 		case 'P':
-			if (memcmp(p + i, "PK\005\006", 4) == 0) {
-				int ret = read_eocd(zip, p + i,
+			if (memcmp(h + i, "PK\005\006", 4) == 0) {
+				int ret = read_eocd(zip, h + i,
 				    current_offset + i);
 				/* Zip64 EOCD locator precedes
 				 * regular EOCD if present. */
-				if (i >= 20 && memcmp(p + i - 20, "PK\006\007", 4) == 0) {
-					int ret_zip64 = read_zip64_eocd(a, zip, p + i - 20);
+				if (i >= 20 && memcmp(h + i - 20, "PK\006\007", 4) == 0) {
+					int ret_zip64 = read_zip64_eocd(a, zip, h + i - 20);
 					if (ret_zip64 > ret)
 						ret = ret_zip64;
 				}
@@ -4300,7 +4316,7 @@ slurp_central_directory(struct archive_read *a, struct archive_entry* entry,
 			zip->has_encrypted_entries = 1;
 		}
 		zip_entry->compression = (char)archive_le16dec(p + 10);
-		zip_entry->mtime = dos_to_unix(archive_le32dec(p + 12));
+		zip_entry->mtime = __archive_dos_to_unix(archive_le32dec(p + 12));
 		zip_entry->crc32 = archive_le32dec(p + 16);
 		if (zip_entry->zip_flags & ZIP_LENGTH_AT_END)
 			zip_entry->decdat = p[13];

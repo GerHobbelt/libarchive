@@ -9,6 +9,7 @@ IF(ENABLE_TEST)
     ../../test_utils/test_main.c
     read_open_memory.c
     test.h
+    test_archive_crc32.c
     test_7zip_filename_encoding.c
     test_acl_from_text_overread.c
     test_acl_nfs4.c
@@ -38,6 +39,7 @@ IF(ENABLE_TEST)
     test_archive_read_multiple_data_objects.c
     test_archive_read_next_header_empty.c
     test_archive_read_next_header_raw.c
+    test_archive_read_open_filenames.c
     test_archive_read_open2.c
     test_archive_read_set_options.c
     test_archive_read_support.c
@@ -123,9 +125,11 @@ IF(ENABLE_TEST)
     test_read_format_cab_filename.c
     test_read_format_cab_lzx_16bit.c
     test_read_format_cab_lzx_e8.c
+    test_read_format_cab_lzx_invalid_history.c
     test_read_format_cab_lzx_oob.c
     test_read_format_cab_mszip_oob.c
     test_read_format_cab_multi.c
+    test_read_format_cab_skip_across_folders.c
     test_read_format_cab_skip_malformed.c
     test_read_format_cpio_afio.c
     test_read_format_cpio_bin.c
@@ -150,6 +154,7 @@ IF(ENABLE_TEST)
     test_read_format_gtar_lzma.c
     test_read_format_gtar_redundant_L.c
     test_read_format_gtar_sparse.c
+    test_read_format_gtar_sparse_exceeds_length.c
     test_read_format_gtar_sparse_length.c
     test_read_format_gtar_sparse_skip_entry.c
     test_read_format_huge_rpm.c
@@ -190,7 +195,9 @@ IF(ENABLE_TEST)
     test_read_format_rar5_bad_filter.c
     test_read_format_rar5_bad_tables.c
     test_read_format_rar5_block_hdr_fail_loop.c
+    test_read_format_rar5_header_size_wraparound.c
     test_read_format_rar5_loop_bug.c
+    test_read_format_rar5_truncated_htime.c
     test_read_format_raw.c
     test_read_format_tar.c
     test_read_format_tar_acl_oob_read.c
@@ -203,6 +210,7 @@ IF(ENABLE_TEST)
     test_read_format_tar_invalid_pax_size.c
     test_read_format_tar_mac_metadata.c
     test_read_format_tar_pax_g_large.c
+    test_read_format_tar_pax_global_header.c
     test_read_format_tar_pax_large_attr.c
     test_read_format_tar_pax_negative_time.c
     test_read_format_tar_pax_sun_holesdata.c

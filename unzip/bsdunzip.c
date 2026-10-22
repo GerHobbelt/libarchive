@@ -45,6 +45,12 @@
 #endif
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#elif defined(HAVE_IO_H)
+/*
+ * Windows has no <unistd.h>; close(), isatty(), open() and write() are
+ * made available by including io.h instead.
+ */
+#include <io.h>
 #endif
 #if ((!defined(HAVE_UTIMENSAT) && defined(HAVE_LUTIMES)) || \
     (!defined(HAVE_FUTIMENS) && defined(HAVE_FUTIMES)))
@@ -633,7 +639,7 @@ extract2fd(struct archive *a, char *pathname, int fd)
 static void
 extract_file(struct archive *a, struct archive_entry *e, char **path)
 {
-	int mode;
+	int flags, mode;
 	struct timespec mtime;
 	struct stat sb;
 	int fd, check, text;
@@ -733,7 +739,11 @@ recheck:
 		return;
 	}
 
-	if ((fd = open(*path, O_RDWR|O_CREAT|O_TRUNC, mode)) < 0)
+	flags = O_RDWR|O_CREAT|O_TRUNC;
+#if defined(_WIN32) && !defined(__CYGWIN__)
+	flags |= O_BINARY;
+#endif
+	if ((fd = open(*path, flags, mode)) < 0)
 		error("open('%s')", *path);
 
 	info(" extracting: %s", *path);
@@ -1200,7 +1210,8 @@ getopts(int argc, char *argv[])
 		case 'Z':
 			zipinfo_mode = 1;
 			if (bsdunzip->argument != NULL &&
-			    strcmp(bsdunzip->argument, "1") == 0) {
+			    (strcmp(bsdunzip->argument, "1") == 0 ||
+			    strcmp(bsdunzip->argument, "-1") == 0)) {
 				Z1_opt = 1;
 			}
 			break;
@@ -1306,6 +1317,13 @@ main(int argc, char *argv[])
 
 	if (n_opt + o_opt + u_opt > 1)
 		errorx("-n, -o and -u are contradictory");
+
+#if defined(_WIN32) && !defined(__CYGWIN__)
+	if (c_opt || p_opt) {
+		if (_setmode(STDOUT_FILENO, _O_BINARY) == -1)
+			errorx("unable to set binary output mode");
+	}
+#endif
 
 	unzip(zipfile);
 
