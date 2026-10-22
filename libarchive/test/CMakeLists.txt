@@ -189,6 +189,7 @@ IF(ENABLE_TEST)
     test_read_format_lha_symlink_missing_target.c
     test_read_format_mtree.c
     test_read_format_mtree_crash747.c
+    test_read_format_mtree_size.c
     test_read_format_pax_bz2.c
     test_read_format_rar.c
     test_read_format_rar_encryption.c
@@ -206,7 +207,9 @@ IF(ENABLE_TEST)
     test_read_format_rar5_extra_field_underflow.c
     test_read_format_rar5_header_size_wraparound.c
     test_read_format_rar5_loop_bug.c
+    test_read_format_rar5_redir_overflow.c
     test_read_format_rar5_truncated_htime.c
+    test_read_format_rar5_varint_near_eof.c
     test_read_format_raw.c
     test_read_format_tar.c
     test_read_format_tar_acl_oob_read.c
@@ -236,7 +239,9 @@ IF(ENABLE_TEST)
     test_read_format_xar_doublelink.c
     test_read_format_zip.c
     test_read_format_zip_7075_utf8_paths.c
+    test_read_format_zip_ambiguous_timestamps.c
     test_read_format_zip_comment_stored.c
+    test_read_format_zip_dos_mtime_precedence.c
     test_read_format_zip_empty.c
     test_read_format_zip_encryption_data.c
     test_read_format_zip_encryption_header.c
@@ -251,12 +256,15 @@ IF(ENABLE_TEST)
     test_read_format_zip_negative_timestamps.c
     test_read_format_zip_nested.c
     test_read_format_zip_nofiletype.c
+    test_read_format_zip_ntfs_precedence.c
+    test_read_format_zip_ntfs_timestamp.c
     test_read_format_zip_padded.c
     test_read_format_zip_sfx.c
     test_read_format_zip_size_exceeds_declared.c
     test_read_format_zip_symlink_unsupported_compression.c
     test_read_format_zip_traditional_encryption_data.c
     test_read_format_zip_uncompressed_size_off_by_4gib.c
+    test_read_format_zip_unset_times.c
     test_read_format_zip_winzip_aes.c
     test_read_format_zip_winzip_aes_large.c
     test_read_format_zip_zip64.c
@@ -293,6 +301,7 @@ IF(ENABLE_TEST)
     test_write_disk_perms.c
     test_write_disk_secure.c
     test_write_disk_secure_noabsolutepaths.c
+    test_write_disk_secure_physicaldrive.c
     test_write_disk_secure744.c
     test_write_disk_secure745.c
     test_write_disk_secure746.c

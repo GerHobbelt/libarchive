@@ -305,7 +305,10 @@ endif
 
 # -no-undefined marks that libarchive doesn't rely on symbols
 # defined in the application.  This is mandatory for cygwin.
-libarchive_la_LDFLAGS= -no-undefined -version-info $(ARCHIVE_LIBTOOL_VERSION) $(DEAD_CODE_REMOVAL)
+# For Windows, set libtool bindir.
+libarchive_la_LDFLAGS= -no-undefined -version-info $(ARCHIVE_LIBTOOL_VERSION) \
+	$(DEAD_CODE_REMOVAL) $(DLL_BINDIR)
+
 libarchive_la_LIBADD= $(LTLIBICONV)
 
 # Manpages to install
@@ -563,6 +566,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_lha_symlink_missing_target.c \
 	libarchive/test/test_read_format_mtree.c \
 	libarchive/test/test_read_format_mtree_crash747.c \
+	libarchive/test/test_read_format_mtree_size.c \
 	libarchive/test/test_read_format_pax_bz2.c \
 	libarchive/test/test_read_format_rar.c \
 	libarchive/test/test_read_format_rar_encryption.c \
@@ -580,7 +584,9 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_rar5_extra_field_underflow.c \
 	libarchive/test/test_read_format_rar5_header_size_wraparound.c \
 	libarchive/test/test_read_format_rar5_loop_bug.c \
+	libarchive/test/test_read_format_rar5_redir_overflow.c \
 	libarchive/test/test_read_format_rar5_truncated_htime.c \
+	libarchive/test/test_read_format_rar5_varint_near_eof.c \
 	libarchive/test/test_read_format_raw.c \
 	libarchive/test/test_read_format_tar.c \
 	libarchive/test/test_read_format_tar_acl_oob_read.c \
@@ -610,7 +616,9 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_xar_doublelink.c \
 	libarchive/test/test_read_format_zip.c \
 	libarchive/test/test_read_format_zip_7075_utf8_paths.c \
+	libarchive/test/test_read_format_zip_ambiguous_timestamps.c \
 	libarchive/test/test_read_format_zip_comment_stored.c \
+	libarchive/test/test_read_format_zip_dos_mtime_precedence.c \
 	libarchive/test/test_read_format_zip_empty.c \
 	libarchive/test/test_read_format_zip_encryption_data.c \
 	libarchive/test/test_read_format_zip_encryption_partially.c \
@@ -625,12 +633,15 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_zip_negative_timestamps.c \
 	libarchive/test/test_read_format_zip_nested.c \
 	libarchive/test/test_read_format_zip_nofiletype.c \
+	libarchive/test/test_read_format_zip_ntfs_precedence.c \
+	libarchive/test/test_read_format_zip_ntfs_timestamp.c \
 	libarchive/test/test_read_format_zip_padded.c \
 	libarchive/test/test_read_format_zip_sfx.c \
 	libarchive/test/test_read_format_zip_size_exceeds_declared.c \
 	libarchive/test/test_read_format_zip_symlink_unsupported_compression.c \
 	libarchive/test/test_read_format_zip_traditional_encryption_data.c \
 	libarchive/test/test_read_format_zip_uncompressed_size_off_by_4gib.c \
+	libarchive/test/test_read_format_zip_unset_times.c \
 	libarchive/test/test_read_format_zip_winzip_aes.c \
 	libarchive/test/test_read_format_zip_winzip_aes_large.c \
 	libarchive/test/test_read_format_zip_zip64.c \
@@ -667,6 +678,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_write_disk_perms.c \
 	libarchive/test/test_write_disk_secure.c \
 	libarchive/test/test_write_disk_secure_noabsolutepaths.c \
+	libarchive/test/test_write_disk_secure_physicaldrive.c \
 	libarchive/test/test_write_disk_secure744.c \
 	libarchive/test/test_write_disk_secure745.c \
 	libarchive/test/test_write_disk_secure746.c \
@@ -1093,14 +1105,17 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_rar5_different_window_size.rar.uu \
 	libarchive/test/test_read_format_rar5_different_solid_window_size.rar.uu \
 	libarchive/test/test_read_format_rar5_distance_overflow.rar.uu \
+	libarchive/test/test_read_format_rar5_extra_data_size_toolong.rar.Z.uu \
 	libarchive/test/test_read_format_rar5_extra_field_underflow.rar.uu \
 	libarchive/test/test_read_format_rar5_extra_field_version.rar.uu \
 	libarchive/test/test_read_format_rar5_fileattr.rar.uu \
+	libarchive/test/test_read_format_rar5_group_name_toolong.rar.uu \
 	libarchive/test/test_read_format_rar5_hardlink.rar.uu \
 	libarchive/test/test_read_format_rar5_invalid_dict_reference.rar.uu \
 	libarchive/test/test_read_format_rar5_leftshift1.rar.uu \
 	libarchive/test/test_read_format_rar5_leftshift2.rar.uu \
 	libarchive/test/test_read_format_rar5_loop_bug.rar.uu \
+	libarchive/test/test_read_format_rar5_redir_overflow.rar.uu \
 	libarchive/test/test_read_format_rar5_multiarchive.part01.rar.uu \
 	libarchive/test/test_read_format_rar5_multiarchive.part02.rar.uu \
 	libarchive/test/test_read_format_rar5_multiarchive.part03.rar.uu \
@@ -1163,8 +1178,9 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_ustar_filename_cp866.tar.Z.uu \
 	libarchive/test/test_read_format_ustar_filename_eucjp.tar.Z.uu \
 	libarchive/test/test_read_format_ustar_filename_koi8r.tar.Z.uu \
-	libarchive/test/test_read_format_warc.warc.uu \
+	libarchive/test/test_read_format_warc_uri_nul.warc.uu \
 	libarchive/test/test_read_format_warc_incomplete.warc.uu \
+	libarchive/test/test_read_format_warc.warc.uu \
 	libarchive/test/test_read_format_xar_atou64_overread.xar.uu \
 	libarchive/test/test_read_format_xar_base64_oob.xar.uu \
 	libarchive/test/test_read_format_xar_doublelink.xar.uu \

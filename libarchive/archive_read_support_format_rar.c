@@ -136,7 +136,7 @@
 #define MAX_SYMBOL_LENGTH 0xF
 #define MAX_SYMBOLS       20
 
-#define SFX_MAX_READAHEAD (1024 * 128)
+#define SFX_MAX_READAHEAD (1024 * 512)
 
 /* Virtual Machine Properties */
 #define VM_MEMORY_SIZE 0x40000
@@ -840,7 +840,7 @@ skip_sfx(struct archive_read *a)
 
   total = 0;
   window = 4096;
-  while (total + window <= (1024 * 128)) {
+  while (total + window <= SFX_MAX_READAHEAD) {
     h = __archive_read_ahead(a, window, &bytes);
     if (h == NULL) {
       /* Remaining bytes are less than window. */
@@ -1514,12 +1514,14 @@ read_header(struct archive_read *a, struct archive_entry *entry,
    * consumed at the end.
    */
   if (head_type == NEWSUB_HEAD) {
-    if (rar->packed_size > INT64_MAX - header_size) {
+    int64_t skip;
+    if (archive_ckd_add_i64(&skip, rar->packed_size, header_size) ||
+        skip < 7) {
       archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
                         "Invalid RAR file: Overlarge extended header");
       return (ARCHIVE_FATAL);
     }
-    if (__archive_read_consume(a, header_size + rar->packed_size - 7) < 0) {
+    if (__archive_read_consume(a, skip - 7) < 0) {
       archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
                         "Invalid RAR file: Cannot read extended header data");
       return (ARCHIVE_FATAL);

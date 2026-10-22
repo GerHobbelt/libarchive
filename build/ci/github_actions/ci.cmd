@@ -38,11 +38,12 @@ IF "%1%"=="configure" (
     cmake --build . --target ALL_BUILD --config Release || EXIT /b 1
   ) ELSE IF "%BE%"=="cygwin-gcc" (
     SET BS=cmake
-    SET MAKE_ARGS=-j
+    SET MAKE_ARGS=-j %NUMBER_OF_PROCESSORS%
     SET CYGWIN_NOWINPATH=1
     D:\cygwin\bin\bash.exe --login -c "cd '%cd%'; ./build/ci/build.sh -a build" || EXIT /b 1
   )
 ) ELSE IF "%1%"=="test" (
+  SET _VERBOSITY_LEVEL=2
   IF "%BE%"=="mingw-gcc" (
     SET PATH=%MINGWPATH%
     CD build_ci\cmake
