@@ -1201,6 +1201,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_xar_doublelink.xar.uu \
 	libarchive/test/test_read_format_xar_duplicate_filename_node.xar.uu \
 	libarchive/test/test_read_format_xar_empty_xattr.xar.uu \
+	libarchive/test/test_read_format_xar_invalid_seek_offset.xar.uu \
 	libarchive/test/test_read_format_xar_large_mode.xar.uu \
 	libarchive/test/test_read_format_xar_parse_time_overread.xar.uu \
 	libarchive/test/test_read_format_xar_toc_premature_stream_end.xar.uu \
@@ -1873,6 +1874,7 @@ bsdunzip_test_SOURCES= \
 	unzip/test/test_singlefile.c \
 	unzip/test/test_C.c \
 	unzip/test/test_p.c \
+	unzip/test/test_prompt.c \
 	unzip/test/test_d.c \
 	unzip/test/test_j.c \
 	unzip/test/test_L.c \
@@ -1917,6 +1919,7 @@ bsdunzip_test_EXTRA_DIST= \
 	unzip/test/test_encrypted.zip.uu \
 	unzip/test/test_f_new.zip.uu \
 	unzip/test/test_f_old.zip.uu \
+	unzip/test/test_prompt.zip.uu \
 	unzip/test/test_singlefile.zip.uu \
 	unzip/test/test_symlink_1.zip.uu \
 	unzip/test/test_symlink_2.zip.uu \
